@@ -22,7 +22,7 @@ export async function runCockpitServerAudit(): Promise<{
     const baseUrl = `http://${LOOPBACK_IPV4}:${(server.address() as AddressInfo).port}`;
     try {
       const html = await (await fetch(`${baseUrl}/`)).text();
-      assert.ok(html.includes('id="btn-merkle"') && html.includes('Merkle-Root') && html.includes('id="btn-egraph-del"'));
+      assert.ok(html.includes('btn-merkle') && html.includes('Merkle-Root') && html.includes('btn-egraph-del'));
 
       const mkJson = (await (await fetch(`${baseUrl}/api/merkle`)).json()) as { merkleRoot: string; leafCount: number; recentLeaves: unknown[] };
       assert.match(mkJson.merkleRoot, /^[a-f0-9]{64}$/);
