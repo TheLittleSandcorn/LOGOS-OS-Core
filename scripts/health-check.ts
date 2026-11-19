@@ -7,7 +7,7 @@ import { DEFAULT_DB_PATH, DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
 export function runSystemHealthCheck(dbPath = DEFAULT_DB_PATH, distDir = DIST_DIR) {
   const snap = computeEavtMerkleSnapshot(dbPath);
   const proof: any = generateInclusionProof(dbPath, 1);
-  const steps = (Object.values(proof).find((v) => Array.isArray(v)) as any[]) ?? [];
+  const steps = Array.isArray(proof.proof) ? proof.proof : Array.isArray(proof.steps) ? proof.steps : Array.isArray(proof.path) ? proof.path : [];
   const proofVerified = verifyInclusionProof(proof.leafHash, steps, snap.merkleRoot);
   const sigPath = join(distDir, 'AUDIT-DOSSIER.sig.json');
   let ed25519Valid = true;
