@@ -2,6 +2,31 @@ import './kernel-egress-lock.ts';
 import { syncAllSovereignArtifacts } from './sync-artifacts.ts';
 import nodeCrypto from 'node:crypto';
 export const SESSION_TOKEN = nodeCrypto.randomBytes(32).toString('hex');
+import { KERNEL_LIMITS, canonicalSha256 } from './canonical-guard.ts';
+function isAllowedLoopbackHostHeader(rawHost: string | undefined): boolean {
+  if (!rawHost) return false;
+  const h = rawHost.toLowerCase();
+  return /^(127\.0\.0\.1|localhost|\[::1\])(:\d{1,5})?$/.test(h);
+}
+function timingSafeTokenEqual(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  if (a.length !== b.length) return false;
+  return nodeCrypto.timingSafeEqual(a, b);
+}
+async function readBoundedBody(req: IncomingMessage, maxBytes = KERNEL_LIMITS.maxBodyBytes): Promise<string> {
+  let size = 0;
+  let out = '';
+  for await (const chunk of req) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+    size += buf.length;
+    if (size > maxBytes) {
+      throw Object.assign(new Error('PAYLOAD_TOO_LARGE'), { statusCode: 413 });
+    }
+    out += buf.toString('utf8');
+  }
+  return out;
+}
 function getSnapshot() {
   try {
     const b = JSON.parse(readFileSync('dist/EVIDENCE-BUNDLE.json', 'utf8'));
@@ -98,11 +123,16 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
 
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${LOOPBACK_HOST}`);
+    if (!isAllowedLoopbackHostHeader(req.headers.host)) {
+      res.writeHead(421, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'MISDIRECTED_HOST_HEADER', hint: 'Only 127.0.0.1, localhost or [::1] Host headers allowed' }));
+      return;
+    }
     if (req.method === 'POST' || req.method === 'DELETE') {
       const auth = String(req.headers['authorization'] || '');
       const hdrToken = String(req.headers['x-logos-token'] || '');
       const bearer = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
-      if (bearer !== SESSION_TOKEN && hdrToken !== SESSION_TOKEN) {
+      if (!timingSafeTokenEqual(bearer, SESSION_TOKEN) && !timingSafeTokenEqual(hdrToken, SESSION_TOKEN)) {
         res.writeHead(401, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'UNAUTHORIZED_LOCAL_PROCESS', hint: 'Provide X-Logos-Token or Authorization: Bearer <SESSION_TOKEN>' }));
         return;
@@ -231,50 +261,56 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       const snap = getSnapshot();
       syncAllSovereignArtifacts(getSnapshot());
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ version: '4.8.3', compliant: true, localhostOnly: true, zeroDependencies: true, merkleRoot: snap.merkleRoot }));
+      res.end(JSON.stringify({ version: '4.8.4', compliant: true, localhostOnly: true, zeroDependencies: true, merkleRoot: snap.merkleRoot }));
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/attest') {
       let body = '';
-      for await (const chunk of req) body += chunk;
+      try {
+        body = await readBoundedBody(req);
+      } catch (err: any) {
+        res.writeHead(err?.statusCode || 413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'PAYLOAD_TOO_LARGE', maxBodyBytes: KERNEL_LIMITS.maxBodyBytes }));
+        return;
+      }
       const parsed = body ? JSON.parse(body) : {};
-      const nonce = typeof parsed.nonce === 'string' && parsed.nonce.length > 0 ? parsed.nonce : nodeCrypto.randomBytes(12).toString('hex');
+      const nonce = typeof parsed.nonce === 'string' && parsed.nonce.length > 0 ? parsed.nonce.normalize('NFC') : nodeCrypto.randomBytes(12).toString('hex');
       const snap = getSnapshot();
-      const receipt = nodeCrypto.createHash('sha256').update(`attest:4.8.3:${snap.merkleRoot}:${nonce}:${Date.now()}`).digest('hex');
+      const receipt = canonicalSha256({ domain: 'attest', version: '4.8.4', merkleRoot: snap.merkleRoot, nonce, ts: Date.now() });
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ attested: true, version: '4.8.3', nonce, receipt, merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
+      res.end(JSON.stringify({ attested: true, version: '4.8.4', nonce, receipt, merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/seal') {
       const snap = getSnapshot();
-      const seal = nodeCrypto.createHash('sha256').update(`4.8.3:${snap.merkleRoot}:${snap.leafCount}`).digest('hex');
+      const seal = nodeCrypto.createHash('sha256').update(`4.8.4:${snap.merkleRoot}:${snap.leafCount}`).digest('hex');
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ version: '4.8.3', sealed: true, seal, merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
+      res.end(JSON.stringify({ version: '4.8.4', sealed: true, seal, merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/manifest') {
       const snap = getSnapshot();
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ exported: true, version: '4.8.3', generatedAt: new Date().toISOString(), merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
+      res.end(JSON.stringify({ exported: true, version: '4.8.4', generatedAt: new Date().toISOString(), merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/telemetry') {
       const snap = getSnapshot();
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ version: '4.8.3', uptimeSec: Math.round(process.uptime()), rssBytes: process.memoryUsage().rss, leafCount: snap.leafCount, merkleRoot: snap.merkleRoot }));
+      res.end(JSON.stringify({ version: '4.8.4', uptimeSec: Math.round(process.uptime()), rssBytes: process.memoryUsage().rss, leafCount: snap.leafCount, merkleRoot: snap.merkleRoot }));
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/verify-proof') {
       const snap = getSnapshot();
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ verified: true, version: '4.8.3', merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
+      res.end(JSON.stringify({ verified: true, version: '4.8.4', merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/audit-log') {
       const snap = getSnapshot();
       const entries = (snap.leaves ?? []).map((leafHash, idx) => ({ seq: idx + 1, leafHash, merkleRoot: snap.merkleRoot }));
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ version: '4.8.3', merkleRoot: snap.merkleRoot, count: entries.length, entries }));
+      res.end(JSON.stringify({ version: '4.8.4', merkleRoot: snap.merkleRoot, count: entries.length, entries }));
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/rotate-key') {
@@ -283,7 +319,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       const nextPubPem = next.publicKey.export({ type: 'spki', format: 'pem' }).toString();
       const continuityProof = nodeCrypto.sign(null, Buffer.from(nextPubPem), prev.privateKey).toString('base64');
       const continuityVerified = nodeCrypto.verify(null, Buffer.from(nextPubPem), prev.publicKey, Buffer.from(continuityProof, 'base64'));
-      const chainEntry = { rotated: true, version: '4.8.3', keyId: nodeCrypto.randomBytes(8).toString('hex'), rotatedAt: new Date().toISOString(), continuityProof, continuityVerified, nextPubPem };
+      const chainEntry = { rotated: true, version: '4.8.4', keyId: nodeCrypto.randomBytes(8).toString('hex'), rotatedAt: new Date().toISOString(), continuityProof, continuityVerified, nextPubPem };
       mkdirSync('dist', { recursive: true });
       writeFileSync('dist/KEY-CONTINUITY.json', JSON.stringify(chainEntry, null, 2), 'utf8');
       res.writeHead(200, { 'Content-Type': 'application/json' });

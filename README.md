@@ -1,4 +1,4 @@
-﻿# LOGOS-OS-Core (v4.8.3)
+﻿# LOGOS-OS-Core (v4.8.4)
 
 **Zero-Dependency TypeScript & Node.js Cryptographic Verification Core** (`node >= 22.6.0`, `127.0.0.1` Loopback Only).
 
