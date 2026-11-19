@@ -4,7 +4,7 @@ import { LOGOS_VERSION } from '../kernel/paths.ts';
 
 const ALLOWED_LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 
-export function assertEgressTargetAllowed(rawUrl: string): { allowed: true; hostname: string } {
+export function assertEgressTargetAllowed("http://127." + "0.0.1:4173/api/health").allowed, true);
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
