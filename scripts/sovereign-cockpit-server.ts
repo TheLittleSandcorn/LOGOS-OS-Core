@@ -138,7 +138,8 @@ export function createSovereignCockpitServer(
   <h1>LOGOS-OS-Core v${LOGOS_VERSION} — Interactive Live Playground Cockpit (${LOOPBACK_HOST})</h1>
   <p>Zero-Dependency · Loopback Only · Belnap-4 Playground · E-Graph Saturation · 9-Stage Audit</p>
   <div style="margin:12px 0;padding:12px;border:1px solid #1e293b;border-radius:6px;background:#0f172a">
-    Belnap-4 Entity: </label>
+    <label for="belnap-entity">Belnap-4 Entity: </label>
+    <input id="belnap-entity" type="text" value="axiom:belnap_4" style="padding:6px;background:#020617;color:#f8fafc;border:1px solid #334155;border-radius:4px;margin-right:6px" />
     
     <button id="btn-belnap" type="button" style="padding:6px 12px;background:#0284c7;color:#fff;border:none;border-radius:4px;cursor:pointer">Evaluate Belnap-4</button>
   </div>
