@@ -113,7 +113,7 @@ const detachedSig = verifyDetachedDossierSignature(DEFAULT_DB_PATH, DIST_DIR);
 assert.equal(detachedSig.status, 'AUTHENTIC');
 
 const cockpitAudit = await runCockpitServerAudit();
-if (!cockpitAudit.merkleInclusionProofVerified || !cockpitAudit.atlasMerkleBadgeRendered) throw new Error('MERKLE_PROOF_ATLAS_AUDIT_FAILED');
+if (!cockpitAudit.healthEndpointVerified || !cockpitAudit.seq2ProofVerified || !cockpitAudit.proofInspectorRendered) throw new Error('HEALTH_PROOF_INSPECTOR_FAILED');
 const finalSync = exportAuditDossierAndBundle(DEFAULT_DB_PATH, DIST_DIR);
 assert.equal(verifyEvidenceBundle(finalSync.bundle).valid, true);
 const elapsedMs = Math.round(performance.now() - t0);
@@ -124,7 +124,8 @@ console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 9-STAGE SOVEREIGN PIPELINE PASSED I
   chaosFuzzerMutations: fuzz.totalMutations,
   egraphUnionFindVerified: true,
   detachedSignatureStatus: detachedSig.status,
-  merkleInclusionProofVerified: cockpitAudit.merkleInclusionProofVerified,
-  atlasMerkleBadgeRendered: cockpitAudit.atlasMerkleBadgeRendered,
+  healthEndpointVerified: cockpitAudit.healthEndpointVerified,
+  seq2ProofVerified: cockpitAudit.seq2ProofVerified,
+  proofInspectorRendered: cockpitAudit.proofInspectorRendered,
   bundleVerified: verified.valid
 });

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { admitFormalTheorem } from '../bricks/cosci-bridge/formal-theorem-gate.ts';
 import { verifyEvidenceBundle } from '../bricks/graph-memory/bundle-verifier.ts';
 import { computeEavtMerkleSnapshot, generateInclusionProof, verifyInclusionProof } from '../bricks/graph-memory/merkle-ledger.ts';
+import { runSystemHealthCheck } from './health-check.ts';
 import { EGraphEquivalenceEngine } from '../bricks/graph-memory/egraph-engine.ts';
 import { exportAuditDossierAndBundle } from '../bricks/graph-memory/export-audit-dossier.ts';
 import { listQuarantineEntries, recordAntiAFailure } from '../bricks/graph-memory/failure-alchemist.ts';
@@ -37,6 +38,7 @@ const COCKPIT_UI_JS = [
   "document.getElementById('btn-retract')?.addEventListener('click', triggerRetract);",
   "document.getElementById('btn-recover')?.addEventListener('click', triggerRecover);",
   "document.getElementById('btn-merkle')?.addEventListener('click', openMerkleModal);",
+  "document.getElementById('btn-proof')?.addEventListener('click', async () => { const seq = Number((document.getElementById('proofSeqInput') as HTMLInputElement)?.value || '1'); const pf = await fetch('/api/merkle/proof?seq=' + seq).then(r => r.json()); renderOut('MERKLE_PROOF_SEQ_' + seq, pf); const dlg = document.getElementById('dosDlg'); const pre = document.getElementById('dosDlgContent'); if (pre) pre.textContent = 'SEQ: ' + seq + ' | VERIFIED: ' + pf.verified + '\\n\\n' + JSON.stringify(pf, null, 2); if (dlg && typeof dlg.showModal === 'function') dlg.showModal(); });",
   "document.getElementById('btn-dl-md')?.addEventListener('click', () => { const md = document.getElementById('dosDlgContent')?.dataset.md || ''; if (!md) return; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' })); a.download = 'AUDIT-DOSSIER.md'; a.click(); });",
   "document.getElementById('btn-dossier')?.addEventListener('click', openDossierModal);",
   "document.getElementById('btn-close-dos')?.addEventListener('click', () => document.getElementById('dosDlg')?.close());",
@@ -174,6 +176,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       return;
     }
     if (url.pathname === '/api/merkle/proof') { const seq = Number(url.searchParams.get('seq') || '1'); const proof = generateInclusionProof(dbPath, seq); const steps = Array.isArray(proof.proof) ? proof.proof : Array.isArray(proof.steps) ? proof.steps : Array.isArray(proof.path) ? proof.path : []; const verified = verifyInclusionProof(proof.leafHash, steps, proof.merkleRoot); const snap = computeEavtMerkleSnapshot(dbPath); sendJson(res, 200, { seq, ...proof, merkleRoot: proof.merkleRoot ?? proof.root ?? snap.merkleRoot, verified }); return; }
+    if (url.pathname === '/api/health') { sendJson(res, 200, runSystemHealthCheck(dbPath, distDir)); return; }
     if (url.pathname === '/api/merkle') { const snap = computeEavtMerkleSnapshot(dbPath); const db = new DatabaseSync(dbPath, { readOnly: true }); let recentLeaves = []; try { recentLeaves = db.prepare('SELECT seq, entity, attribute, value, truth_state FROM eavt_ledger ORDER BY seq DESC LIMIT 8').all(); } finally { db.close(); } sendJson(res, 200, { algorithm: 'SHA-256-BINARY-MERKLE', leafCount: snap.leafCount, merkleRoot: snap.merkleRoot, recentLeaves }); return; }
     if (url.pathname === '/api/dossier') {
       const dossierPath = join(outDir, 'AUDIT-DOSSIER.md');
@@ -228,7 +231,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       const html = '\x3c!doctype html>\x3chtml>\x3chead>\x3cmeta charset="utf-8">\x3ctitle>LOGOS-OS-Core Cockpit\x3c/title>\x3c/head>\x3cbody style="background:#090d16;color:#e2e8f0;font-family:sans-serif;padding:2rem">\x3ch1>LOGOS-OS-Core v' + LOGOS_VERSION + ' Offline-CSP &amp; Live Telemetry Cockpit\x3c/h1>\x3cdiv id="telemetry-bar" style="padding:8px 12px;background:#0f172a;border:1px solid #334155;border-radius:6px;margin-bottom:12px">Loading live telemetry...\x3c/div>\x3cdiv>\x3cinput id="thm-id" placeholder="Theorem ID" />\x3cinput id="thm-claim" placeholder="Claim" />\x3cinput id="thm-lean" placeholder="Lean Header" />\x3cinput id="thm-k" placeholder="Critique K" />\x3cinput id="thm-deps" placeholder="depends_on" />\x3cbutton id="btn-ingest">Ingest &amp; Auto-Sign\x3c/button>\x3c/div>\x3cdiv>\x3cinput id="belnap-entity" value="axiom:belnap_4" />\x3cbutton id="btn-belnap">Belnap-4\x3c/button>\x3cbutton id="btn-retract">Retract\x3c/button>\x3cbutton id="btn-recover">Recover\x3c/button>\x3cbutton id="btn-dossier">Ed25519 Dossier\x3c/button>\x3c/div>\x3cdiv>\x3cinput id="egraph-lhs" value="1 * (x + 0)" />\x3cinput id="egraph-rhs" value="x" />\x3cbutton id="btn-egraph">Check E-Graph\x3c/button>\x3cbutton id="btn-egraph-union">Regel lernen\x3c/button>\x3cbutton id="btn-egraph-del">Regel l\u00f6schen\x3c/button>\x3cbutton id="btn-refresh">Status\x3c/button>\x3cbutton id="btn-audit">Run Audit\x3c/button>\x3c/div>\x3cpre id="cockpit-output">Loading...\x3c/pre>\x3cdialog id="dosDlg" style="background:#0f172a;color:#f8fafc;border:1px solid #38bdf8;border-radius:8px;max-width:720px;padding:1.5rem">\x3cbutton id="btn-close-dos">Close Dossier\x3c/button>\x3cpre id="dosDlgContent" style="white-space:pre-wrap">\x3c/pre>\x3c/dialog>\x3cscript src="/cockpit-ui.js">\x3c/script>\x3c/body>\x3c/html>';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
       const mkSnap = computeEavtMerkleSnapshot(dbPath);
-      let outHtml = html.includes("btn-merkle") ? html : html.replace(/<button[^>]*btn-dossier[^>]*>/, (m) => `<button id="btn-merkle" type="button">Merkle-Root</button>${m}`);
+      let outHtml = html.includes("btn-merkle") ? html : html.replace(/<button[^>]*btn-dossier[^>]*>/, (m) => `<button id="btn-merkle" type="button">Merkle-Root</button><input id="proofSeqInput" type="number" min="1" value="1" style="width:54px;margin-left:4px;" /><button id="btn-proof" type="button">Proof (seq)</button>${m}`);
       if (!outHtml.includes("btn-dl-md")) outHtml += `<button id="btn-dl-md" type="button">Download .md</button>`;
       if (!outHtml.includes("MERKLE-ROOT (SHA-256):")) outHtml += `<footer style="margin-top:16px;font-family:monospace;font-size:12px;">MERKLE-ROOT (SHA-256): ${mkSnap.merkleRoot} | LEAVES: ${mkSnap.leafCount}</footer>`;
       res.end(outHtml);
