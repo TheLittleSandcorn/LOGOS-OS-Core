@@ -176,7 +176,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       return;
     }
     if (url.pathname === '/api/merkle/proof') { const seq = Number(url.searchParams.get('seq') || '1'); const proof = generateInclusionProof(dbPath, seq); const steps = Array.isArray(proof.proof) ? proof.proof : Array.isArray(proof.steps) ? proof.steps : Array.isArray(proof.path) ? proof.path : []; const verified = verifyInclusionProof(proof.leafHash, steps, proof.merkleRoot); const snap = computeEavtMerkleSnapshot(dbPath); sendJson(res, 200, { seq, ...proof, merkleRoot: proof.merkleRoot ?? proof.root ?? snap.merkleRoot, verified }); return; }
-    if (url.pathname === '/api/health') { sendJson(res, 200, runSystemHealthCheck(dbPath, distDir)); return; }
+    if (url.pathname === '/api/health') { sendJson(res, 200, runSystemHealthCheck(dbPath, outDir)); return; }
     if (url.pathname === '/api/merkle') { const snap = computeEavtMerkleSnapshot(dbPath); const db = new DatabaseSync(dbPath, { readOnly: true }); let recentLeaves = []; try { recentLeaves = db.prepare('SELECT seq, entity, attribute, value, truth_state FROM eavt_ledger ORDER BY seq DESC LIMIT 8').all(); } finally { db.close(); } sendJson(res, 200, { algorithm: 'SHA-256-BINARY-MERKLE', leafCount: snap.leafCount, merkleRoot: snap.merkleRoot, recentLeaves }); return; }
     if (url.pathname === '/api/dossier') {
       const dossierPath = join(outDir, 'AUDIT-DOSSIER.md');
