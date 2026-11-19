@@ -12,14 +12,12 @@
   "scripts": {
     "sovereign": "node scripts/run-sovereign-pipeline.ts",
     "verify-bundle": "node bricks/graph-memory/bundle-verifier.ts",
-    "cockpit": "node scripts/sovereign-cockpit-server.ts",
     "query": "node scripts/query-knowledge.ts",
     "immune": "node scripts/test-immune-system.ts",
     "integrity": "node scripts/verify-ledger-integrity.ts",
     "fuzz": "node scripts/fuzz-sovereign-seed.ts",
     "sign": "node scripts/sign-sovereign-ledger.ts",
     "perimeter": "node scripts/test-security-perimeter.ts",
-    "test-cockpit": "node scripts/test-cockpit-server.ts",
     "verify-sig": "node scripts/verify-dossier-signature.ts"
   }
 }

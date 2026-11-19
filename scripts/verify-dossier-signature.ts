@@ -30,7 +30,7 @@ export function verifyDetachedDossierSignature(
   };
 }
 
-if (process.argv === fileURLToPath(import.meta.url)) {
+if (process.argv.at(1) === fileURLToPath(import.meta.url)) {
   const report = verifyDetachedDossierSignature();
   console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} DETACHED ED25519 SIGNATURE VERIFICATION:`, report);
 }
