@@ -203,28 +203,41 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       sendJson(res, 200, { ...bundle, verification: check });
       return;
     }
+    if (req.method === 'GET' && url.pathname === '/api/seal') {
+      const snap = getSnapshot();
+      const seal = crypto.createHash('sha256').update(`4.7.0:${snap.merkleRoot}:${snap.leafCount}`).digest('hex');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ version: '4.7.0', sealed: true, seal, merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/manifest') {
+      const snap = getSnapshot();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ exported: true, version: '4.7.0', generatedAt: new Date().toISOString(), merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/telemetry') {
       const snap = getSnapshot();
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ version: '4.6.0', uptimeSec: Math.round(process.uptime()), rssBytes: process.memoryUsage().rss, leafCount: snap.leafCount, merkleRoot: snap.merkleRoot }));
+      res.end(JSON.stringify({ version: '4.7.0', uptimeSec: Math.round(process.uptime()), rssBytes: process.memoryUsage().rss, leafCount: snap.leafCount, merkleRoot: snap.merkleRoot }));
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/verify-proof') {
       const snap = getSnapshot();
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ verified: true, version: '4.6.0', merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
+      res.end(JSON.stringify({ verified: true, version: '4.7.0', merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/audit-log') {
       const snap = getSnapshot();
       const entries = (snap.leaves ?? []).map((leafHash, idx) => ({ seq: idx + 1, leafHash, merkleRoot: snap.merkleRoot }));
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ version: '4.6.0', merkleRoot: snap.merkleRoot, count: entries.length, entries }));
+      res.end(JSON.stringify({ version: '4.7.0', merkleRoot: snap.merkleRoot, count: entries.length, entries }));
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/rotate-key') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ rotated: true, version: '4.6.0', keyId: crypto.randomBytes(8).toString('hex'), rotatedAt: new Date().toISOString() }));
+      res.end(JSON.stringify({ rotated: true, version: '4.7.0', keyId: crypto.randomBytes(8).toString('hex'), rotatedAt: new Date().toISOString() }));
       return;
     }
     if (url.pathname === '/api/backups' && req.method === 'DELETE') {
@@ -314,7 +327,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       const html = '\x3c!doctype html>\x3chtml>\x3chead>\x3cmeta charset="utf-8">\x3ctitle>LOGOS-OS-Core Cockpit\x3c/title>\x3c/head>\x3cbody style="background:#090d16;color:#e2e8f0;font-family:sans-serif;padding:2rem">\x3ch1>LOGOS-OS-Core v' + LOGOS_VERSION + ' Offline-CSP &amp; Live Telemetry Cockpit\x3c/h1>\x3cdiv id="telemetry-bar" style="padding:8px 12px;background:#0f172a;border:1px solid #334155;border-radius:6px;margin-bottom:12px">Loading live telemetry...\x3c/div>\x3cdiv>\x3cinput id="thm-id" placeholder="Theorem ID" />\x3cinput id="thm-claim" placeholder="Claim" />\x3cinput id="thm-lean" placeholder="Lean Header" />\x3cinput id="thm-k" placeholder="Critique K" />\x3cinput id="thm-deps" placeholder="depends_on" />\x3cbutton id="btn-ingest">Ingest &amp; Auto-Sign\x3c/button>\x3c/div>\x3cdiv>\x3cinput id="belnap-entity" value="axiom:belnap_4" />\x3cbutton id="btn-belnap">Belnap-4\x3c/button>\x3cbutton id="btn-retract">Retract\x3c/button>\x3cbutton id="btn-recover">Recover\x3c/button>\x3cbutton id="btn-dossier">Ed25519 Dossier\x3c/button>\x3c/div>\x3cdiv>\x3cinput id="egraph-lhs" value="1 * (x + 0)" />\x3cinput id="egraph-rhs" value="x" />\x3cbutton id="btn-egraph">Check E-Graph\x3c/button>\x3cbutton id="btn-egraph-union">Regel lernen\x3c/button>\x3cbutton id="btn-egraph-del">Regel l\u00f6schen\x3c/button>\x3cbutton id="btn-refresh">Status\x3c/button>\x3cbutton id="btn-audit">Run Audit\x3c/button>\x3c/div>\x3cpre id="cockpit-output">Loading...\x3c/pre>\x3cdialog id="dosDlg" style="background:#0f172a;color:#f8fafc;border:1px solid #38bdf8;border-radius:8px;max-width:720px;padding:1.5rem">\x3cbutton id="btn-close-dos">Close Dossier\x3c/button>\x3cpre id="dosDlgContent" style="white-space:pre-wrap">\x3c/pre>\x3c/dialog>\x3cscript src="/cockpit-ui.js">\x3c/script>\x3c/body>\x3c/html>';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
       const mkSnap = computeEavtMerkleSnapshot(dbPath);
-      let outHtml = html.includes("btn-merkle") ? html : html.replace(/<button[^>]*btn-dossier[^>]*>/, (m) => `<button id="btn-merkle" type="button">Merkle-Root</button><input id="proofSeqInput" type="number" min="1" value="1" style="width:54px;margin-left:4px;" /><button id="btn-proof" type="button">Proof (seq)</button><button id="btn-health" type="button">Health</button><button id="btn-backup" type="button">DB-Backup</button><button id="btn-audit-log" onclick="fetch('/api/audit-log').then(r=>r.json()).then(d=>alert(JSON.stringify(d,null,2)))">Audit Log</button> <button id="btn-telemetry" onclick="fetch('/api/telemetry').then(r=>r.json()).then(d=>alert(JSON.stringify(d,null,2)))">Telemetry</button> <button id="btn-bundle" type="button">Evidence Bundle</button> <button id="btn-audit-log" onclick="fetch('/api/audit-log').then(r=>r.json()).then(d=>alert(JSON.stringify(d,null,2)))">Audit Log</button>${m}`);
+      let outHtml = html.includes("btn-merkle") ? html : html.replace(/<button[^>]*btn-dossier[^>]*>/, (m) => `<button id="btn-merkle" type="button">Merkle-Root</button><input id="proofSeqInput" type="number" min="1" value="1" style="width:54px;margin-left:4px;" /><button id="btn-proof" type="button">Proof (seq)</button><button id="btn-health" type="button">Health</button><button id="btn-backup" type="button">DB-Backup</button><button id="btn-audit-log" onclick="fetch('/api/audit-log').then(r=>r.json()).then(d=>alert(JSON.stringify(d,null,2)))">Audit Log</button> <button id="btn-telemetry" onclick="fetch('/api/telemetry').then(r=>r.json()).then(d=>alert(JSON.stringify(d,null,2)))">Telemetry</button> <button id="btn-seal" onclick="fetch('/api/seal').then(r=>r.json()).then(d=>alert(JSON.stringify(d,null,2)))">Integrity Seal</button> <button id="btn-bundle" type="button">Evidence Bundle</button> <button id="btn-audit-log" onclick="fetch('/api/audit-log').then(r=>r.json()).then(d=>alert(JSON.stringify(d,null,2)))">Audit Log</button>${m}`);
       if (!outHtml.includes("proofSeqInput")) outHtml = outHtml.replace('<button id="btn-merkle" type="button">Merkle-Root</button>', '<button id="btn-merkle" type="button">Merkle-Root</button><input id="proofSeqInput" type="number" min="1" value="1" style="width:54px;margin-left:4px;" /><button id="btn-proof" type="button">Proof (seq)</button>');
       if (!outHtml.includes("btn-dl-md")) outHtml += `<button id="btn-dl-md" type="button">Download .md</button>`;
       if (!outHtml.includes("MERKLE-ROOT (SHA-256):")) outHtml += `<footer style="margin-top:16px;font-family:monospace;font-size:12px;">MERKLE-ROOT (SHA-256): ${mkSnap.merkleRoot} | LEAVES: ${mkSnap.leafCount}</footer>`;
