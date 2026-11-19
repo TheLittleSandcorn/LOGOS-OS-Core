@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
-import { DatabaseSync } from 'node:sqlite';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
 import { ensureSeededDatabase } from '../kernel/seed-bootstrap.ts';
@@ -9,36 +11,64 @@ import { createSovereignCockpitServer } from './sovereign-cockpit-server.ts';
 const LOOPBACK_IPV4 = ['127', '0', '0', '1'].join('.');
 
 export async function runCockpitServerAudit(): Promise<{
-  healthEndpointVerified: boolean;
-  seq2ProofVerified: boolean;
-  proofInspectorRendered: boolean;
+  zeroTrustVerifyEndpointPassed: boolean;
+  tamperedProofRejected: boolean;
+  atomicBackupSnapshotVerified: boolean;
+  healthAndBackupButtonsRendered: boolean;
 }> {
-  const memUri = 'file:logos_v42_health_cockpit?mode=memory&cache=shared';
-  const holdDb = new DatabaseSync(memUri);
+  const tempDbPath = join(tmpdir(), `logos-v43-audit-${Date.now()}.db`);
   try {
-    ensureSeededDatabase(memUri);
-    const server = createSovereignCockpitServer(memUri, DIST_DIR);
+    ensureSeededDatabase(tempDbPath);
+    const server = createSovereignCockpitServer(tempDbPath, DIST_DIR);
     await new Promise<void>((resolve) => server.listen(0, LOOPBACK_IPV4, resolve));
     const baseUrl = `http://${LOOPBACK_IPV4}:${(server.address() as AddressInfo).port}`;
     try {
       const html = await (await fetch(`${baseUrl}/`)).text();
-      assert.ok(html.includes('id="proofSeqInput"') && html.includes('id="btn-proof"') && html.includes('Proof (seq)'));
+      assert.ok(html.includes('id="btn-health"') && html.includes('id="btn-backup"'));
 
-      const health = (await (await fetch(`${baseUrl}/api/health`)).json()) as { healthy: boolean; seq1ProofVerified: boolean; ed25519Valid: boolean };
-      assert.equal(health.healthy, true);
-      assert.equal(health.seq1ProofVerified, true);
-      assert.equal(health.ed25519Valid, true);
+      const pf = (await (await fetch(`${baseUrl}/api/merkle/proof?seq=1`)).json()) as Record<string, unknown>;
+      const ver = (await (await fetch(`${baseUrl}/api/merkle/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pf),
+      })).json()) as { valid: boolean };
+      assert.equal(ver.valid, true);
 
-      const pf2 = (await (await fetch(`${baseUrl}/api/merkle/proof?seq=2`)).json()) as { verified: boolean; seq: number };
-      assert.equal(pf2.verified, true);
-      assert.equal(pf2.seq, 2);
+      const badVer = (await (await fetch(`${baseUrl}/api/merkle/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...pf, merkleRoot: '0'.repeat(64) }),
+      })).json()) as { valid: boolean };
+      assert.equal(badVer.valid, false);
+
+      const bak = (await (await fetch(`${baseUrl}/api/backup`, { method: 'POST' })).json()) as {
+        backedUp: boolean;
+        backupFile: string;
+        sha256: string;
+        sizeBytes: number;
+      };
+      assert.equal(bak.backedUp, true);
+      assert.match(bak.sha256, /^[a-f0-9]{64}$/);
+      assert.ok(bak.sizeBytes > 0);
+      rmSync(bak.backupFile, { force: true });
 
       await fetch(`${baseUrl}/api/run-pipeline`, { method: 'POST' });
-      return { healthEndpointVerified: true, seq2ProofVerified: true, proofInspectorRendered: true };
-    } finally { server.close(); }
-  } finally { holdDb.close(); }
+      return {
+        zeroTrustVerifyEndpointPassed: true,
+        tamperedProofRejected: true,
+        atomicBackupSnapshotVerified: true,
+        healthAndBackupButtonsRendered: true,
+      };
+    } finally {
+      server.close();
+    }
+  } finally {
+    rmSync(tempDbPath, { force: true });
+    rmSync(`${tempDbPath}-wal`, { force: true });
+    rmSync(`${tempDbPath}-shm`, { force: true });
+  }
 }
 
 if (process.argv.at(1) === fileURLToPath(import.meta.url)) {
-  console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} HEALTH & PROOF INSPECTOR v4.2.0 AUDIT PASSED:`, await runCockpitServerAudit());
+  console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} ZERO-TRUST VERIFY & ATOMIC BACKUP v4.3.0 AUDIT PASSED:`, await runCockpitServerAudit());
 }
