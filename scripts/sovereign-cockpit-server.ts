@@ -36,8 +36,8 @@ const COCKPIT_UI_JS = [
   "document.getElementById('btn-belnap')?.addEventListener('click', checkBelnap);",
   "document.getElementById('btn-retract')?.addEventListener('click', triggerRetract);",
   "document.getElementById('btn-recover')?.addEventListener('click', triggerRecover);",
-  "document.getElementById('btn-merkle')?.addEventListener('click', openMerkleModal);
-  document.getElementById('btn-dl-md')?.addEventListener('click', () => { const md = document.getElementById('dosDlgContent')?.dataset.md || ''; if (!md) return; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' })); a.download = 'AUDIT-DOSSIER.md'; a.click(); });",
+  "document.getElementById('btn-merkle')?.addEventListener('click', openMerkleModal);",
+  "document.getElementById('btn-dl-md')?.addEventListener('click', () => { const md = document.getElementById('dosDlgContent')?.dataset.md || ''; if (!md) return; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' })); a.download = 'AUDIT-DOSSIER.md'; a.click(); });",
   "document.getElementById('btn-dossier')?.addEventListener('click', openDossierModal);",
   "document.getElementById('btn-close-dos')?.addEventListener('click', () => document.getElementById('dosDlg')?.close());",
   "document.getElementById('btn-egraph')?.addEventListener('click', checkEgraph);",
