@@ -59,7 +59,7 @@ export function exportEternalCartridgeAndAtlas(
     .map((ent) => {
       const evalRes = evaluateEntityBelnapState(ent, dbPath);
       const badgeColor = evalRes.state === 'TRUE' ? '#065f46' : evalRes.state === 'BOTH' ? '#991b1b' : '#334155';
-      return `
+      return `<article class="axiom-card" data-entity="${ent}" style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px;margin:8px 0">
       <code>${ent}</code> <span class="belnap-badge" style="background:${badgeColor};color:#f8fafc;padding:2px 8px;border-radius:4px;font-size:12px">[BELNAP-4: ${evalRes.state} | CLASS_A]</span>
     </article>`;
     })
