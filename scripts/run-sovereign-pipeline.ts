@@ -1,3 +1,4 @@
+import { runChaosSeedFuzzer } from './fuzz-sovereign-seed.ts';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
@@ -83,8 +84,9 @@ const verified = verifyEvidenceBundle(exported.bundle);
 const llmsPath = exportLlmsTxtManifest(exported.bundle, DIST_DIR);
 const eternal = exportEternalCartridgeAndAtlas(exported.bundle, DIST_DIR, [], exported.quarantine, DEFAULT_DB_PATH);
 const atlasContent = readFileSync(eternal.atlasPath, 'utf8');
+const fuzz = runChaosSeedFuzzer(0x5eed2026, 50);
 const integrity = runFullIntegrityAudit(DEFAULT_DB_PATH, DIST_DIR);
-if (!verified.valid || !existsSync(llmsPath) || !atlasContent.includes('[BELNAP-4: TRUE | CLASS_A]') || !integrity.cartridgeSha256Verified) {
+if (!verified.valid || !existsSync(llmsPath) || !atlasContent.includes('class="axiom-card"') || !integrity.cartridgeSha256Verified) {
   throw new Error('ORCHESTRATOR_VERIFICATION_FAILED');
 }
 

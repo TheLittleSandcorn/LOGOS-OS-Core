@@ -55,11 +55,13 @@ export function exportEternalCartridgeAndAtlas(
       : '<li>No quarantined entries in local store.</li>';
 
   const axiomEntities = ['axiom:zero_dependency', 'axiom:loopback_only', 'axiom:belnap_4', 'axiom:anti_a_quarantine'];
-  const axiomBadgesHtml = axiomEntities
+  const axiomCardsHtml = axiomEntities
     .map((ent) => {
       const evalRes = evaluateEntityBelnapState(ent, dbPath);
       const badgeColor = evalRes.state === 'TRUE' ? '#065f46' : evalRes.state === 'BOTH' ? '#991b1b' : '#334155';
-      return `<li><code>${ent}</code> <span class="belnap-badge" style="background:${badgeColor};color:#f8fafc;padding:2px 8px;border-radius:4px;font-size:12px">[BELNAP-4: ${evalRes.state} | CLASS_A]</span></li>`;
+      return `
+      <code>${ent}</code> <span class="belnap-badge" style="background:${badgeColor};color:#f8fafc;padding:2px 8px;border-radius:4px;font-size:12px">[BELNAP-4: ${evalRes.state} | CLASS_A]</span>
+    </article>`;
     })
     .join('\n    ');
 
@@ -71,10 +73,9 @@ export function exportEternalCartridgeAndAtlas(
   <p><strong>Merkle-Root (SHA-256):</strong> <code>${bundle.merkleRoot}</code> | <strong>Leaves:</strong> ${bundle.leafCount} | <strong>Quarantined:</strong> ${quarantineEntries.length}</p>
   ${retractionBanner}
   <section style="margin:16px 0;padding:12px;border:1px solid #334155;border-radius:8px">
-    <h2 style="margin-top:0">Verified CLASS_A Axioms &amp; Live Belnap-4 Badges</h2>
-    <ul>
-    ${axiomBadgesHtml}
-    </ul>
+    <h2 style="margin-top:0">Verified CLASS_A Axiom Cards &amp; Live Filter</h2>
+    <input id="atlas-filter" type="search" placeholder="Filter CLASS_A axioms..." style="width:100%;max-width:340px;padding:6px 10px;margin-bottom:10px;background:#020617;color:#f8fafc;border:1px solid #334155;border-radius:4px" />
+    ${axiomCardsHtml}
   </section>
   <section id="immune-shield" style="margin:16px 0;padding:12px;border:1px solid #991b1b;background:#1f1115;border-radius:8px">
     <h2 style="margin-top:0;color:#fca5a5">Epistemic Immune Shield (Anti-A Quarantine Telemetry)</h2>
@@ -100,6 +101,13 @@ export function exportEternalCartridgeAndAtlas(
     <canvas id="formula-canvas" width="560" height="140" style="display:block;margin-top:10px;background:#020617;border:1px solid #1e293b"></canvas>
   </section>
   <script>
+    const filterInput = document.getElementById('atlas-filter');
+    filterInput.addEventListener('input', () => {
+      const q = filterInput.value.toLowerCase();
+      for (const card of document.querySelectorAll('.axiom-card')) {
+        card.style.display = card.dataset.entity.toLowerCase().includes(q) ? 'block' : 'none';
+      }
+    });
     const canvas = document.getElementById('formula-canvas');
     const ctx = canvas.getContext('2d');
     const slider = document.getElementById('mu-slider');
