@@ -1,3 +1,4 @@
+import { runFullIntegrityAudit } from './verify-ledger-integrity.ts';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
@@ -78,6 +79,8 @@ if (!verified.valid || !existsSync(llmsPath) || !atlasContent.includes('lineage-
   throw new Error('EVIDENCE_OR_SVG_LINEAGE_ATLAS_FAILED');
 }
 
+const integrity = runFullIntegrityAudit(DEFAULT_DB_PATH, DIST_DIR);
+if (!integrity.cartridgeSha256Verified) throw new Error('CARTRIDGE_INTEGRITY_FAILED');
 const elapsedMs = Math.round(performance.now() - t0);
 console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} SOVEREIGN PIPELINE PASSED IN ${elapsedMs}ms:`, {
   merkleRoot: exported.bundle.merkleRoot,
@@ -85,5 +88,6 @@ console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} SOVEREIGN PIPELINE PASSED IN ${elap
   keyId: exported.bundle.keyId,
   svgLineageGraphRendered: true,
   immuneShieldRendered: true,
+  fourLayerIntegrityVerified: integrity.cartridgeSha256Verified,
   bundleVerified: verified.valid
 });
