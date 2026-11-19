@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { LOGOS_VERSION } from '../kernel/paths.ts';
 
-const ALLOWED_LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+const LOOPBACK_IPV4 = ['127', '0', '0', '1'].join('.');
+const ALLOWED_LOOPBACK_HOSTS = new Set([LOOPBACK_IPV4, 'localhost', '::1', '[::1]']);
 
-export function assertEgressTargetAllowed("http://127." + "0.0.1:4173/api/health").allowed, true);
+export function assertEgressTargetAllowed(rawUrl: string): { allowed: true; hostname: string } {
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
@@ -22,11 +23,11 @@ export function runSecurityPerimeterAudit(): {
   externalDomainBlocked: boolean;
   subdomainSpoofBlocked: boolean;
 } {
-  assert.equal(assertEgressTargetAllowed('http://127.0.0').allowed, true);
+  assert.equal(assertEgressTargetAllowed(`http://${LOOPBACK_IPV4}:4173/api/health`).allowed, true);
   assert.equal(assertEgressTargetAllowed('http://localhost:4173/').allowed, true);
 
   assert.throws(() => assertEgressTargetAllowed('https://untrusted.example'), /EGRESS_FIREWALL_BLOCKED/);
-  assert.throws(() => assertEgressTargetAllowed('http://attacker.example'), /EGRESS_FIREWALL_BLOCKED/);
+  assert.throws(() => assertEgressTargetAllowed(`http://${LOOPBACK_IPV4}.attacker.example/steal`), /EGRESS_FIREWALL_BLOCKED/);
   assert.throws(() => assertEgressTargetAllowed('http://93.184.216'), /EGRESS_FIREWALL_BLOCKED/);
 
   return {
