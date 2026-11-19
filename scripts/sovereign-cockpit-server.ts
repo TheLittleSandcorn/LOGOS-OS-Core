@@ -173,7 +173,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       } finally { db.close(); }
       return;
     }
-    if (url.pathname === '/api/merkle/proof') { const seq = Number(url.searchParams.get('seq') || '1'); const proof = generateInclusionProof(dbPath, seq); const verified = verifyInclusionProof(proof.leafHash, proof.proof, proof.merkleRoot); sendJson(res, 200, { ...proof, verified }); return; }
+    if (url.pathname === '/api/merkle/proof') { const seq = Number(url.searchParams.get('seq') || '1'); const proof = generateInclusionProof(dbPath, seq); const verified = verifyInclusionProof(proof); sendJson(res, 200, { ...proof, verified }); return; }
     if (url.pathname === '/api/merkle') { const snap = computeEavtMerkleSnapshot(dbPath); const db = new DatabaseSync(dbPath, { readOnly: true }); let recentLeaves = []; try { recentLeaves = db.prepare('SELECT seq, entity, attribute, value, truth_state FROM eavt_ledger ORDER BY seq DESC LIMIT 8').all(); } finally { db.close(); } sendJson(res, 200, { algorithm: 'SHA-256-BINARY-MERKLE', leafCount: snap.leafCount, merkleRoot: snap.merkleRoot, recentLeaves }); return; }
     if (url.pathname === '/api/dossier') {
       const dossierPath = join(outDir, 'AUDIT-DOSSIER.md');
