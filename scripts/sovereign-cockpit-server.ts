@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { admitFormalTheorem } from '../bricks/cosci-bridge/formal-theorem-gate.ts';
 import { verifyEvidenceBundle } from '../bricks/graph-memory/bundle-verifier.ts';
-import { computeEavtMerkleSnapshot } from '../bricks/graph-memory/merkle-ledger.ts';
+import { computeEavtMerkleSnapshot, generateEavtInclusionProof, verifyMerkleInclusionProof } from '../bricks/graph-memory/merkle-ledger.ts';
 import { EGraphEquivalenceEngine } from '../bricks/graph-memory/egraph-engine.ts';
 import { exportAuditDossierAndBundle } from '../bricks/graph-memory/export-audit-dossier.ts';
 import { listQuarantineEntries, recordAntiAFailure } from '../bricks/graph-memory/failure-alchemist.ts';
@@ -26,7 +26,7 @@ const COCKPIT_UI_JS = [
   "async function triggerRetract() { const e = document.getElementById('belnap-entity')?.value || 'axiom:belnap_4'; renderOut('RETRACT', await fetch('/api/retract?entity=' + encodeURIComponent(e), { method: 'POST' }).then(r => r.json())); }",
   "async function triggerRecover() { const e = document.getElementById('belnap-entity')?.value || 'axiom:belnap_4'; renderOut('RECOVER', await fetch('/api/recover?entity=' + encodeURIComponent(e), { method: 'POST' }).then(r => r.json())); }",
   "async function openMerkleModal() { const mk = await fetch('/api/merkle').then(r => r.json()); renderOut('MERKLE_ROOT_AUDIT', mk); const dlg = document.getElementById('dosDlg'); const pre = document.getElementById('dosDlgContent'); if (pre) pre.textContent = 'MERKLE ROOT (SHA-256): ' + mk.merkleRoot + ' | LEAVES: ' + mk.leafCount + '\\n\\n' + JSON.stringify(mk.recentLeaves, null, 2); if (dlg && typeof dlg.showModal === 'function') dlg.showModal(); }",
-  "async function openDossierModal() { const ds = await fetch('/api/dossier').then(r => r.json()); renderOut('ED25519_DOSSIER', ds); const dlg = document.getElementById('dosDlg'); const pre = document.getElementById('dosDlgContent'); if (pre) pre.textContent = 'STATUS: ' + (ds.authentic ? 'AUTHENTIC' : 'INVALID') + ' | KEY-ID: ' + ds.keyId + '\\n\\n' + ds.dossierMarkdown; if (dlg && typeof dlg.showModal === 'function') dlg.showModal(); }",
+  "async function openDossierModal() { const ds = await fetch('/api/dossier').then(r => r.json()); renderOut('ED25519_DOSSIER', ds); const dlg = document.getElementById('dosDlg'); const pre = document.getElementById('dosDlgContent'); if (pre) { pre.dataset.md = ds.dossierMarkdown; pre.textContent = 'STATUS: ' + (ds.authentic ? 'AUTHENTIC' : 'INVALID') + ' | KEY-ID: ' + ds.keyId + '\\n\\n' + ds.dossierMarkdown; if (dlg && typeof dlg.showModal === 'function') dlg.showModal(); }",
   "async function checkEgraph() { const l = document.getElementById('egraph-lhs')?.value || '1 * (x + 0)'; const r = document.getElementById('egraph-rhs')?.value || 'x'; renderOut('EGRAPH_QUERY', await fetch('/api/egraph?lhs=' + encodeURIComponent(l) + '&rhs=' + encodeURIComponent(r)).then(r => r.json())); }",
   "async function learnEgraphRule() { const lhs = document.getElementById('egraph-lhs')?.value || ''; const rhs = document.getElementById('egraph-rhs')?.value || ''; renderOut('EGRAPH_LEARNED', await fetch('/api/egraph/union', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lhs, rhs }) }).then(r => r.json())); await refreshStatus(); }",
   "async function deleteEgraphRule() { const lhs = document.getElementById('egraph-lhs')?.value || ''; renderOut('EGRAPH_DELETED', await fetch('/api/egraph/rule?lhs=' + encodeURIComponent(lhs), { method: 'DELETE' }).then(r => r.json())); await refreshStatus(); }",
@@ -36,7 +36,8 @@ const COCKPIT_UI_JS = [
   "document.getElementById('btn-belnap')?.addEventListener('click', checkBelnap);",
   "document.getElementById('btn-retract')?.addEventListener('click', triggerRetract);",
   "document.getElementById('btn-recover')?.addEventListener('click', triggerRecover);",
-  "document.getElementById('btn-merkle')?.addEventListener('click', openMerkleModal);",
+  "document.getElementById('btn-merkle')?.addEventListener('click', openMerkleModal);
+  document.getElementById('btn-dl-md')?.addEventListener('click', () => { const md = document.getElementById('dosDlgContent')?.dataset.md || ''; if (!md) return; const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([md], { type: 'text/markdown' })); a.download = 'AUDIT-DOSSIER.md'; a.click(); });",
   "document.getElementById('btn-dossier')?.addEventListener('click', openDossierModal);",
   "document.getElementById('btn-close-dos')?.addEventListener('click', () => document.getElementById('dosDlg')?.close());",
   "document.getElementById('btn-egraph')?.addEventListener('click', checkEgraph);",
@@ -172,6 +173,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       } finally { db.close(); }
       return;
     }
+    if (url.pathname === '/api/merkle/proof') { const seq = Number(url.searchParams.get('seq') || '1'); const proof = generateEavtInclusionProof(dbPath, seq); const verified = verifyMerkleInclusionProof(proof.leafHash, proof.proof, proof.merkleRoot); sendJson(res, 200, { ...proof, verified }); return; }
     if (url.pathname === '/api/merkle') { const snap = computeEavtMerkleSnapshot(dbPath); const db = new DatabaseSync(dbPath, { readOnly: true }); let recentLeaves = []; try { recentLeaves = db.prepare('SELECT seq, entity, attribute, value, truth_state FROM eavt_ledger ORDER BY seq DESC LIMIT 8').all(); } finally { db.close(); } sendJson(res, 200, { algorithm: 'SHA-256-BINARY-MERKLE', leafCount: snap.leafCount, merkleRoot: snap.merkleRoot, recentLeaves }); return; }
     if (url.pathname === '/api/dossier') {
       const dossierPath = join(outDir, 'AUDIT-DOSSIER.md');
