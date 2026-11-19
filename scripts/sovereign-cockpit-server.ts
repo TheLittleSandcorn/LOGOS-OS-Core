@@ -232,6 +232,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
       const mkSnap = computeEavtMerkleSnapshot(dbPath);
       let outHtml = html.includes("btn-merkle") ? html : html.replace(/<button[^>]*btn-dossier[^>]*>/, (m) => `<button id="btn-merkle" type="button">Merkle-Root</button><input id="proofSeqInput" type="number" min="1" value="1" style="width:54px;margin-left:4px;" /><button id="btn-proof" type="button">Proof (seq)</button>${m}`);
+      if (!outHtml.includes("proofSeqInput")) outHtml = outHtml.replace('<button id="btn-merkle" type="button">Merkle-Root</button>', '<button id="btn-merkle" type="button">Merkle-Root</button><input id="proofSeqInput" type="number" min="1" value="1" style="width:54px;margin-left:4px;" /><button id="btn-proof" type="button">Proof (seq)</button>');
       if (!outHtml.includes("btn-dl-md")) outHtml += `<button id="btn-dl-md" type="button">Download .md</button>`;
       if (!outHtml.includes("MERKLE-ROOT (SHA-256):")) outHtml += `<footer style="margin-top:16px;font-family:monospace;font-size:12px;">MERKLE-ROOT (SHA-256): ${mkSnap.merkleRoot} | LEAVES: ${mkSnap.leafCount}</footer>`;
       res.end(outHtml);

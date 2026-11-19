@@ -1,13 +1,13 @@
 import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { computeEavtMerkleSnapshot, generateInclusionProof, verifyInclusionProof } from '../bricks/graph-memory/merkle-ledger.ts';
 import { verifyEvidenceBundle } from '../bricks/graph-memory/bundle-verifier.ts';
-import { DB_PATH, DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
-import { join } from 'node:path';
+import { DEFAULT_DB_PATH, DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
 
-export function runSystemHealthCheck(dbPath = DB_PATH, distDir = DIST_DIR) {
+export function runSystemHealthCheck(dbPath = DEFAULT_DB_PATH, distDir = DIST_DIR) {
   const snap = computeEavtMerkleSnapshot(dbPath);
-  const proof = generateInclusionProof(dbPath, 1);
-  const steps = Array.isArray((proof as any).proof) ? (proof as any).proof : Array.isArray((proof as any).steps) ? (proof as any).steps : Array.isArray((proof as any).path) ? (proof as any).path : [];
+  const proof: any = generateInclusionProof(dbPath, 1);
+  const steps = Array.isArray(proof.proof) ? proof.proof : Array.isArray(proof.steps) ? proof.steps : Array.isArray(proof.path) ? proof.path : [];
   const proofVerified = verifyInclusionProof(proof.leafHash, steps, snap.merkleRoot);
   const bundleCheck = verifyEvidenceBundle(join(distDir, 'LOGOS-EVIDENCE-BUNDLE.json'));
   const healthy = snap.leafCount >= 4 && proofVerified && bundleCheck.valid;
