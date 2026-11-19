@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { admitFormalTheorem } from '../bricks/cosci-bridge/formal-theorem-gate.ts';
 import { verifyEvidenceBundle } from '../bricks/graph-memory/bundle-verifier.ts';
-import { computeEavtMerkleSnapshot, computeEavtInclusionProof, verifyMerkleInclusionProof } from '../bricks/graph-memory/merkle-ledger.ts';
+import { computeEavtMerkleSnapshot, generateInclusionProof, verifyMerkleInclusionProof } from '../bricks/graph-memory/merkle-ledger.ts';
 import { EGraphEquivalenceEngine } from '../bricks/graph-memory/egraph-engine.ts';
 import { exportAuditDossierAndBundle } from '../bricks/graph-memory/export-audit-dossier.ts';
 import { listQuarantineEntries, recordAntiAFailure } from '../bricks/graph-memory/failure-alchemist.ts';
@@ -173,7 +173,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       } finally { db.close(); }
       return;
     }
-    if (url.pathname === '/api/merkle/proof') { const seq = Number(url.searchParams.get('seq') || '1'); const proof = computeEavtInclusionProof(dbPath, seq); const verified = verifyMerkleInclusionProof(proof.leafHash, proof.proof, proof.merkleRoot); sendJson(res, 200, { ...proof, verified }); return; }
+    if (url.pathname === '/api/merkle/proof') { const seq = Number(url.searchParams.get('seq') || '1'); const proof = generateInclusionProof(dbPath, seq); const verified = verifyMerkleInclusionProof(proof.leafHash, proof.proof, proof.merkleRoot); sendJson(res, 200, { ...proof, verified }); return; }
     if (url.pathname === '/api/merkle') { const snap = computeEavtMerkleSnapshot(dbPath); const db = new DatabaseSync(dbPath, { readOnly: true }); let recentLeaves = []; try { recentLeaves = db.prepare('SELECT seq, entity, attribute, value, truth_state FROM eavt_ledger ORDER BY seq DESC LIMIT 8').all(); } finally { db.close(); } sendJson(res, 200, { algorithm: 'SHA-256-BINARY-MERKLE', leafCount: snap.leafCount, merkleRoot: snap.merkleRoot, recentLeaves }); return; }
     if (url.pathname === '/api/dossier') {
       const dossierPath = join(outDir, 'AUDIT-DOSSIER.md');
