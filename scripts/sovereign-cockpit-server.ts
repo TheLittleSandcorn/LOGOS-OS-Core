@@ -8,7 +8,7 @@ import { verifyEvidenceBundle } from '../bricks/graph-memory/bundle-verifier.ts'
 import { EGraphEquivalenceEngine } from '../bricks/graph-memory/egraph-engine.ts';
 import { exportAuditDossierAndBundle } from '../bricks/graph-memory/export-audit-dossier.ts';
 import { listQuarantineEntries, recordAntiAFailure } from '../bricks/graph-memory/failure-alchemist.ts';
-import { verifyPayloadEd25519 } from '../bricks/graph-memory/trust-anchor.ts';
+import { ensureTrustAnchor, verifyPayloadEd25519 } from '../bricks/graph-memory/trust-anchor.ts';
 import { evaluateEntityBelnapState } from '../kernel/belnap-engine.ts';
 import { DEFAULT_DB_PATH, DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
 import { ensureSeededDatabase } from '../kernel/seed-bootstrap.ts';
@@ -42,7 +42,7 @@ const COCKPIT_UI_JS = [
 ].join('\n');
 
 function sendJson(res: ServerResponse, statusCode: number, data: unknown): void {
-  res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff' });
+  res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
   res.end(JSON.stringify(data));
 }
 
@@ -82,7 +82,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       }
     }
     if (url.pathname === '/cockpit-ui.js') {
-      res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Content-Type-Options': 'nosniff' });
+      res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
       res.end(COCKPIT_UI_JS);
       return;
     }
@@ -105,7 +105,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
     if (url.pathname.startsWith('/artifacts/') && url.pathname.endsWith('.html')) {
       const artPath = join(outDir, 'artifacts', basename(url.pathname));
       if (!existsSync(artPath)) { sendJson(res, 404, { error: 'ARTIFACT_NOT_FOUND' }); return; }
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Content-Type-Options': 'nosniff' });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
       res.end(readFileSync(artPath, 'utf8'));
       return;
     }
@@ -149,7 +149,8 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       try {
         const row = db.prepare("SELECT COUNT(*) AS cnt FROM eavt_ledger WHERE epistemic_class = 'CLASS_A'").get() as { cnt: number };
         const eRow = db.prepare('SELECT COUNT(*) AS cnt FROM egraph_rules').get() as { cnt: number };
-        sendJson(res, 200, { ok: true, version: LOGOS_VERSION, bindHost: LOOPBACK_HOST, classACount: row.cnt, egraphRuleCount: eRow.cnt, quarantineCount: listQuarantineEntries(dbPath).length });
+        const keyFingerprint = ensureTrustAnchor().keyId.slice(0, 12);
+        sendJson(res, 200, { ok: true, version: LOGOS_VERSION, bindHost: LOOPBACK_HOST, keyFingerprint, classACount: row.cnt, egraphRuleCount: eRow.cnt, quarantineCount: listQuarantineEntries(dbPath).length });
       } finally { db.close(); }
       return;
     }
@@ -204,7 +205,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
     }
     if (url.pathname === '/') {
       const html = '\x3c!doctype html>\x3chtml>\x3chead>\x3cmeta charset="utf-8">\x3ctitle>LOGOS-OS-Core Cockpit\x3c/title>\x3c/head>\x3cbody style="background:#090d16;color:#e2e8f0;font-family:sans-serif;padding:2rem">\x3ch1>LOGOS-OS-Core v' + LOGOS_VERSION + ' Persistent SQLite E-Graph &amp; Dossier Modal Cockpit\x3c/h1>\x3cdiv>\x3cinput id="thm-id" placeholder="Theorem ID" />\x3cinput id="thm-claim" placeholder="Claim" />\x3cinput id="thm-lean" placeholder="Lean Header" />\x3cinput id="thm-k" placeholder="Critique K" />\x3cinput id="thm-deps" placeholder="depends_on" />\x3cbutton id="btn-ingest">Ingest &amp; Auto-Sign\x3c/button>\x3c/div>\x3cdiv>\x3cinput id="belnap-entity" value="axiom:belnap_4" />\x3cbutton id="btn-belnap">Belnap-4\x3c/button>\x3cbutton id="btn-retract">Retract\x3c/button>\x3cbutton id="btn-recover">Recover\x3c/button>\x3cbutton id="btn-dossier">Ed25519 Dossier\x3c/button>\x3c/div>\x3cdiv>\x3cinput id="egraph-lhs" value="1 * (x + 0)" />\x3cinput id="egraph-rhs" value="x" />\x3cbutton id="btn-egraph">Check E-Graph\x3c/button>\x3cbutton id="btn-egraph-union">Regel lernen\x3c/button>\x3cbutton id="btn-refresh">Status\x3c/button>\x3cbutton id="btn-audit">Run Audit\x3c/button>\x3c/div>\x3cpre id="cockpit-output">Loading...\x3c/pre>\x3cdialog id="dosDlg" style="background:#0f172a;color:#f8fafc;border:1px solid #38bdf8;border-radius:8px;max-width:720px;padding:1.5rem">\x3cbutton id="btn-close-dos">Close Dossier\x3c/button>\x3cpre id="dosDlgContent" style="white-space:pre-wrap">\x3c/pre>\x3c/dialog>\x3cscript src="/cockpit-ui.js">\x3c/script>\x3c/body>\x3c/html>';
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff' });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
       res.end(html);
       return;
     }
