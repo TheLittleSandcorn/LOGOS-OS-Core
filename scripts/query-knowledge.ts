@@ -64,9 +64,9 @@ export function retractEntityWithCascade(
   }
 }
 
-if (process.argv === fileURLToPath(import.meta.url)) {
-  const cmd = process.argv ?? 'search';
-  const arg = process.argv ?? '';
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const cmd = process.argv[2] ?? 'search';
+  const arg = process.argv[3] ?? '';
   if (cmd === 'search') {
     const hits = searchKnowledgeLedger(arg);
     console.log(`LOGOS-OS-CORE CLI INSPECTOR (${hits.length} hits for "${arg}"):`, hits);

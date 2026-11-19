@@ -20,6 +20,7 @@ import { DEFAULT_DB_PATH, DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
 import { ensureSeededDatabase } from '../kernel/seed-bootstrap.ts';
 import { exportEternalCartridgeAndAtlas } from './export-eternal-artifact.ts';
 import { retractEntityWithCascade, searchKnowledgeLedger } from './query-knowledge.ts';
+import { runImmuneSystemAudit } from './test-immune-system.ts';
 
 const t0 = performance.now();
 
@@ -33,11 +34,14 @@ assert.equal(reg.hasPolicy(POLICY_WRITE_CLASS_A), true);
 
 ensureSeededDatabase(DEFAULT_DB_PATH);
 
+const immuneReport = runImmuneSystemAudit();
+assert.equal(immuneReport.zeroAmnesiaVerified, true);
+assert.equal(immuneReport.classALedgerUntouched, true);
+
 const hits = searchKnowledgeLedger('belnap', DEFAULT_DB_PATH);
 assert.ok(hits.length >= 1);
 
-// Test recursive WITH RECURSIVE retraction cascade on an isolated :memory: DB
-const memCascadePath = 'file:logos_v21_cascade?mode=memory&cache=shared';
+const memCascadePath = 'file:logos_v22_cascade?mode=memory&cache=shared';
 const holdDb = new DatabaseSync(memCascadePath);
 try {
   ensureSeededDatabase(memCascadePath);
@@ -79,8 +83,7 @@ console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} SOVEREIGN PIPELINE PASSED IN ${elap
   merkleRoot: exported.bundle.merkleRoot,
   leafCount: exported.bundle.leafCount,
   keyId: exported.bundle.keyId,
-  cliSearchHits: hits.length,
-  recursiveRetractionCascade: true,
-  canvasAtlasExported: true,
+  antiAQuarantinedCount: immuneReport.quarantinedCount,
+  zeroAmnesiaVerified: immuneReport.zeroAmnesiaVerified,
   bundleVerified: verified.valid
 });
