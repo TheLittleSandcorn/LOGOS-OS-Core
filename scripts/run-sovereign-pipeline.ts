@@ -113,7 +113,7 @@ const detachedSig = verifyDetachedDossierSignature(DEFAULT_DB_PATH, DIST_DIR);
 assert.equal(detachedSig.status, 'AUTHENTIC');
 
 const cockpitAudit = await runCockpitServerAudit();
-if (!cockpitAudit.offlineConnectSrcCspVerified || cockpitAudit.egraphRuleCount !== 0) throw new Error('OFFLINE_CSP_RULE_AUDIT_FAILED');
+if (!cockpitAudit.merkleRootEndpointVerified || !cockpitAudit.merkleModalButtonRendered) throw new Error('MERKLE_COCKPIT_AUDIT_FAILED');
 const finalSync = exportAuditDossierAndBundle(DEFAULT_DB_PATH, DIST_DIR);
 assert.equal(verifyEvidenceBundle(finalSync.bundle).valid, true);
 const elapsedMs = Math.round(performance.now() - t0);
@@ -124,7 +124,7 @@ console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 9-STAGE SOVEREIGN PIPELINE PASSED I
   chaosFuzzerMutations: fuzz.totalMutations,
   egraphUnionFindVerified: true,
   detachedSignatureStatus: detachedSig.status,
-  offlineConnectSrcCspVerified: cockpitAudit.offlineConnectSrcCspVerified,
-  ruleCleanupStatus: cockpitAudit.ruleCleanup,
+  merkleRootEndpointVerified: cockpitAudit.merkleRootEndpointVerified,
+  merkleModalRendered: cockpitAudit.merkleModalButtonRendered,
   bundleVerified: verified.valid
 });

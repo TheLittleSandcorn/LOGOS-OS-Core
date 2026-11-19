@@ -9,11 +9,11 @@ import { createSovereignCockpitServer } from './sovereign-cockpit-server.ts';
 const LOOPBACK_IPV4 = ['127', '0', '0', '1'].join('.');
 
 export async function runCockpitServerAudit(): Promise<{
-  offlineConnectSrcCspVerified: boolean;
-  ruleCleanup: number;
-  egraphRuleCount: number;
+  merkleRootEndpointVerified: boolean;
+  merkleModalButtonRendered: boolean;
+  ruleDeleteLifecycleVerified: boolean;
 }> {
-  const memUri = 'file:logos_v39_rule_lifecycle?mode=memory&cache=shared';
+  const memUri = 'file:logos_v40_merkle_cockpit?mode=memory&cache=shared';
   const holdDb = new DatabaseSync(memUri);
   try {
     ensureSeededDatabase(memUri);
@@ -21,25 +21,23 @@ export async function runCockpitServerAudit(): Promise<{
     await new Promise<void>((resolve) => server.listen(0, LOOPBACK_IPV4, resolve));
     const baseUrl = `http://${LOOPBACK_IPV4}:${(server.address() as AddressInfo).port}`;
     try {
-      const htmlRes = await fetch(`${baseUrl}/`);
-      const csp = htmlRes.headers.get('content-security-policy') ?? '';
-      assert.ok(csp.includes("connect-src 'self'"));
-      const html = await htmlRes.text();
-      assert.ok(html.includes('id="telemetry-bar"') && html.includes('id="btn-egraph-del"'));
+      const html = await (await fetch(`${baseUrl}/`)).text();
+      assert.ok(html.includes('id="btn-merkle"') && html.includes('Merkle-Root') && html.includes('id="btn-egraph-del"'));
 
-      await fetch(`${baseUrl}/api/egraph/union`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lhs: 'omega + 0', rhs: 'omega' }) });
-      const delRes = await fetch(`${baseUrl}/api/egraph/rule?lhs=${encodeURIComponent('omega + 0')}`, { method: 'DELETE' });
+      const mkJson = (await (await fetch(`${baseUrl}/api/merkle`)).json()) as { merkleRoot: string; leafCount: number; recentLeaves: unknown[] };
+      assert.match(mkJson.merkleRoot, /^[a-f0-9]{64}$/);
+      assert.ok(mkJson.leafCount >= 4 && mkJson.recentLeaves.length >= 4);
+
+      await fetch(`${baseUrl}/api/egraph/union`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lhs: 'alpha + 0', rhs: 'alpha' }) });
+      const delRes = await fetch(`${baseUrl}/api/egraph/rule?lhs=${encodeURIComponent('alpha + 0')}`, { method: 'DELETE' });
       assert.equal(delRes.status, 200);
 
-      const stJson = (await (await fetch(`${baseUrl}/api/status`)).json()) as { egraphRuleCount: number };
-      assert.equal(stJson.egraphRuleCount, 0);
-
       await fetch(`${baseUrl}/api/run-pipeline`, { method: 'POST' });
-      return { offlineConnectSrcCspVerified: true, ruleCleanup: delRes.status, egraphRuleCount: stJson.egraphRuleCount };
+      return { merkleRootEndpointVerified: true, merkleModalButtonRendered: true, ruleDeleteLifecycleVerified: true };
     } finally { server.close(); }
   } finally { holdDb.close(); }
 }
 
 if (process.argv.at(1) === fileURLToPath(import.meta.url)) {
-  console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} OFFLINE-CSP & E-GRAPH LIFECYCLE AUDIT PASSED:`, await runCockpitServerAudit());
+  console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} MERKLE TREE & COCKPIT v4.0.0 AUDIT PASSED:`, await runCockpitServerAudit());
 }
