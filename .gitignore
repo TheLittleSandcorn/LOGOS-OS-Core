@@ -1,9 +1,9 @@
-node_modules/
+﻿node_modules/
 dist/
-knowledge/*.db
-knowledge/*.db-wal
-knowledge/*.db-shm
-knowledge/*.key.json
-knowledge/pro-rules/
-file
+*.sqlite
+*.db
+*.pem
+*.key.json
+*.vault.json
+knowledge/.sovereign-ed25519.key.json
 .env

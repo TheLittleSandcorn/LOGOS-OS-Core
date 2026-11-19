@@ -211,7 +211,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       const snap = getSnapshot();
       syncAllSovereignArtifacts(getSnapshot());
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ version: '4.8.1', compliant: true, localhostOnly: true, zeroDependencies: true, merkleRoot: snap.merkleRoot }));
+      res.end(JSON.stringify({ version: '4.8.2', compliant: true, localhostOnly: true, zeroDependencies: true, merkleRoot: snap.merkleRoot }));
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/attest') {
@@ -220,41 +220,41 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       const parsed = body ? JSON.parse(body) : {};
       const nonce = typeof parsed.nonce === 'string' && parsed.nonce.length > 0 ? parsed.nonce : crypto.randomBytes(12).toString('hex');
       const snap = getSnapshot();
-      const receipt = crypto.createHash('sha256').update(`attest:4.8.1:${snap.merkleRoot}:${nonce}:${Date.now()}`).digest('hex');
+      const receipt = crypto.createHash('sha256').update(`attest:4.8.2:${snap.merkleRoot}:${nonce}:${Date.now()}`).digest('hex');
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ attested: true, version: '4.8.1', nonce, receipt, merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
+      res.end(JSON.stringify({ attested: true, version: '4.8.2', nonce, receipt, merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/seal') {
       const snap = getSnapshot();
-      const seal = crypto.createHash('sha256').update(`4.8.1:${snap.merkleRoot}:${snap.leafCount}`).digest('hex');
+      const seal = crypto.createHash('sha256').update(`4.8.2:${snap.merkleRoot}:${snap.leafCount}`).digest('hex');
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ version: '4.8.1', sealed: true, seal, merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
+      res.end(JSON.stringify({ version: '4.8.2', sealed: true, seal, merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/manifest') {
       const snap = getSnapshot();
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ exported: true, version: '4.8.1', generatedAt: new Date().toISOString(), merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
+      res.end(JSON.stringify({ exported: true, version: '4.8.2', generatedAt: new Date().toISOString(), merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/telemetry') {
       const snap = getSnapshot();
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ version: '4.8.1', uptimeSec: Math.round(process.uptime()), rssBytes: process.memoryUsage().rss, leafCount: snap.leafCount, merkleRoot: snap.merkleRoot }));
+      res.end(JSON.stringify({ version: '4.8.2', uptimeSec: Math.round(process.uptime()), rssBytes: process.memoryUsage().rss, leafCount: snap.leafCount, merkleRoot: snap.merkleRoot }));
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/verify-proof') {
       const snap = getSnapshot();
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ verified: true, version: '4.8.1', merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
+      res.end(JSON.stringify({ verified: true, version: '4.8.2', merkleRoot: snap.merkleRoot, leafCount: snap.leafCount }));
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/audit-log') {
       const snap = getSnapshot();
       const entries = (snap.leaves ?? []).map((leafHash, idx) => ({ seq: idx + 1, leafHash, merkleRoot: snap.merkleRoot }));
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ version: '4.8.1', merkleRoot: snap.merkleRoot, count: entries.length, entries }));
+      res.end(JSON.stringify({ version: '4.8.2', merkleRoot: snap.merkleRoot, count: entries.length, entries }));
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/rotate-key') {
@@ -263,7 +263,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       const nextPubPem = next.publicKey.export({ type: 'spki', format: 'pem' }).toString();
       const continuityProof = crypto.sign(null, Buffer.from(nextPubPem), prev.privateKey).toString('base64');
       const continuityVerified = crypto.verify(null, Buffer.from(nextPubPem), prev.publicKey, Buffer.from(continuityProof, 'base64'));
-      const chainEntry = { rotated: true, version: '4.8.1', keyId: crypto.randomBytes(8).toString('hex'), rotatedAt: new Date().toISOString(), continuityProof, continuityVerified, nextPubPem };
+      const chainEntry = { rotated: true, version: '4.8.2', keyId: crypto.randomBytes(8).toString('hex'), rotatedAt: new Date().toISOString(), continuityProof, continuityVerified, nextPubPem };
       fs.mkdirSync('dist', { recursive: true });
       fs.writeFileSync('dist/KEY-CONTINUITY.json', JSON.stringify(chainEntry, null, 2), 'utf8');
       res.writeHead(200, { 'Content-Type': 'application/json' });
