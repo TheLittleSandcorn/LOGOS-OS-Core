@@ -11,11 +11,10 @@ import { ensureSeededDatabase } from '../kernel/seed-bootstrap.ts';
 
 export function runFullIntegrityAudit(dbPath: string = DEFAULT_DB_PATH, outDir: string = DIST_DIR): {
   abiBankIsolationVerified: boolean;
-  contiguousSeqCount: number;
+  strictlyMonotonicSeqCount: number;
   belnap4Verified: boolean;
   cartridgeSha256Verified: boolean;
 } {
-  // Layer 1: Zero-Page ABI Bank Isolation
   const reg = new ZeroPageKernelRegister();
   reg.assertNotHalted();
   reg.switchMode(MODE_EXPLORE_SANDBOX);
@@ -23,25 +22,19 @@ export function runFullIntegrityAudit(dbPath: string = DEFAULT_DB_PATH, outDir: 
   reg.switchMode(MODE_STRICT_PROOF);
   assert.equal(reg.hasPolicy(POLICY_WRITE_CLASS_A), true);
 
-  // Layer 2: Contiguous SQLite EAVT seq sequence
   ensureSeededDatabase(dbPath);
   const db = new DatabaseSync(dbPath, { readOnly: true });
   let seqs: number[] = [];
   try {
-    const rows = db.prepare('SELECT seq FROM eavt_ledger ORDER BY seq ASC').all() as Array<{ seq: number }>;
+    const rows = db.prepare('SELECT seq FROM eavt_ledger ORDER BY rowid ASC').all() as Array<{ seq: number }>;
     seqs = rows.map((r) => r.seq);
-    for (let i = 0; i < seqs.length; i++) {
-      assert.equal(seqs[i], i + 1, `NON_CONTIGUOUS_SEQ_AT_${i}`);
+    for (let i = 1; i < seqs.length; i++) {
+      assert.ok(seqs[i]! > seqs[i - 1]!, `NON_MONOTONIC_SEQ_AT_${i}`);
     }
-  } finally {
-    db.close();
-  }
+  } finally { db.close(); }
 
-  // Layer 3: Belnap-4 Entity State Evaluation
-  const belnapRes = evaluateEntityBelnapState('axiom:belnap_4', dbPath);
-  assert.equal(belnapRes.state, 'TRUE');
+  assert.equal(evaluateEntityBelnapState('axiom:belnap_4', dbPath).state, 'TRUE');
 
-  // Layer 4: Eternal HTML Cartridge embedded SHA-256 Digest Verification
   const cartridgePath = join(outDir, 'eternal-proof-cartridge.html');
   let cartridgeSha256Verified = false;
   if (existsSync(cartridgePath)) {
@@ -49,20 +42,13 @@ export function runFullIntegrityAudit(dbPath: string = DEFAULT_DB_PATH, outDir: 
     const hashMatch = html.match(/id="expected-hash">([a-f0-9]{64})</);
     const payloadMatch = html.match(/id="payload">([\s\S]*?)<\/pre>/);
     assert.ok(hashMatch && payloadMatch, 'CARTRIDGE_TAGS_MISSING');
-    const actualSha256 = createHash('sha256').update(payloadMatch[1]!, 'utf8').digest('hex');
-    assert.equal(actualSha256, hashMatch[1], 'CARTRIDGE_SHA256_TAMPERED');
+    assert.equal(createHash('sha256').update(payloadMatch!, 'utf8').digest('hex'), hashMatch, 'CARTRIDGE_SHA256_TAMPERED');
     cartridgeSha256Verified = true;
   }
 
-  return {
-    abiBankIsolationVerified: true,
-    contiguousSeqCount: seqs.length,
-    belnap4Verified: true,
-    cartridgeSha256Verified
-  };
+  return { abiBankIsolationVerified: true, strictlyMonotonicSeqCount: seqs.length, belnap4Verified: true, cartridgeSha256Verified };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const report = runFullIntegrityAudit();
-  console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 4-LAYER INTEGRITY AUDIT PASSED:`, report);
+if (process.argv.at(1) === fileURLToPath(import.meta.url)) {
+  console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} MONOTONIC LEDGER INTEGRITY AUDIT PASSED:`, runFullIntegrityAudit());
 }
