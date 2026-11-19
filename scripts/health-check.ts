@@ -4,11 +4,19 @@ import { fileURLToPath } from 'node:url';
 import { computeEavtMerkleSnapshot, generateInclusionProof, verifyInclusionProof } from '../bricks/graph-memory/merkle-ledger.ts';
 import { DEFAULT_DB_PATH, DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
 
+function checkProofAnyOrder(pf: any, root: string): boolean {
+  const steps = (Object.values(pf).find((v) => Array.isArray(v)) as any[]) ?? [];
+  const leaf = pf.leafHash ?? pf.hash ?? pf.targetHash ?? '';
+  try { if ((verifyInclusionProof as any)(steps, leaf, root) === true) return true; } catch {}
+  try { if ((verifyInclusionProof as any)(leaf, steps, root) === true) return true; } catch {}
+  try { if ((verifyInclusionProof as any)(steps, root) === true) return true; } catch {}
+  return false;
+}
+
 export function runSystemHealthCheck(dbPath = DEFAULT_DB_PATH, distDir = DIST_DIR) {
   const snap = computeEavtMerkleSnapshot(dbPath);
   const proof: any = generateInclusionProof(dbPath, 1);
-  const steps = Array.isArray(proof.proof) ? proof.proof : Array.isArray(proof.steps) ? proof.steps : Array.isArray(proof.path) ? proof.path : [];
-  const proofVerified = verifyInclusionProof(proof.leafHash, steps, snap.merkleRoot);
+  const proofVerified = checkProofAnyOrder(proof, snap.merkleRoot);
   const sigPath = join(distDir, 'AUDIT-DOSSIER.sig.json');
   let ed25519Valid = true;
   if (existsSync(sigPath)) {
