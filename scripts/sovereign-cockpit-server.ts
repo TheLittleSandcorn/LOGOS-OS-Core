@@ -8,26 +8,38 @@ import { listQuarantineEntries } from '../bricks/graph-memory/failure-alchemist.
 import { evaluateEntityBelnapState } from '../kernel/belnap-engine.ts';
 import { DEFAULT_DB_PATH, DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
 import { ensureSeededDatabase } from '../kernel/seed-bootstrap.ts';
+import { exportEternalCartridgeAndAtlas } from './export-eternal-artifact.ts';
 
 const LOOPBACK_HOST = ['127', '0', '0', '1'].join('.');
 const CSP_HEADER = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 
 const COCKPIT_UI_JS = `
-async function refreshStatus() {
-  const [st, eg, bn] = await Promise.all([
-    fetch('/api/status').then(r => r.json()),
-    fetch('/api/egraph?lhs=' + encodeURIComponent('1 * (x + 0)') + '&rhs=' + encodeURIComponent('x')).then(r => r.json()),
-    fetch('/api/belnap?entity=' + encodeURIComponent('axiom:belnap_4')).then(r => r.json())
-  ]);
+function renderOut(title, payload) {
   const out = document.getElementById('cockpit-output');
-  if (out) out.textContent = JSON.stringify({ status: st, egraphCheck: eg, belnapCheck: bn }, null, 2);
+  if (out) out.textContent = JSON.stringify({ section: title, timestamp: new Date().toISOString(), payload }, null, 2);
+}
+async function refreshStatus() {
+  const st = await fetch('/api/status').then(r => r.json());
+  renderOut('SYSTEM_STATUS', st);
+}
+async function checkBelnap() {
+  const entity = document.getElementById('belnap-entity')?.value || 'axiom:belnap_4';
+  const bn = await fetch('/api/belnap?entity=' + encodeURIComponent(entity)).then(r => r.json());
+  renderOut('BELNAP_4_PLAYGROUND', bn);
+}
+async function checkEgraph() {
+  const lhs = document.getElementById('egraph-lhs')?.value || '1 * (x + 0)';
+  const rhs = document.getElementById('egraph-rhs')?.value || 'x';
+  const eg = await fetch('/api/egraph?lhs=' + encodeURIComponent(lhs) + '&rhs=' + encodeURIComponent(rhs)).then(r => r.json());
+  renderOut('EGRAPH_PLAYGROUND', eg);
 }
 async function runLiveAudit() {
   const res = await fetch('/api/run-pipeline', { method: 'POST' }).then(r => r.json());
-  const out = document.getElementById('cockpit-output');
-  if (out) out.textContent = JSON.stringify(res, null, 2);
+  renderOut('FULL_9_STAGE_AUDIT_AND_ATLAS_RELOAD', res);
 }
 document.getElementById('btn-refresh')?.addEventListener('click', refreshStatus);
+document.getElementById('btn-belnap')?.addEventListener('click', checkBelnap);
+document.getElementById('btn-egraph')?.addEventListener('click', checkEgraph);
 document.getElementById('btn-audit')?.addEventListener('click', runLiveAudit);
 window.addEventListener('DOMContentLoaded', refreshStatus);
 `.trim();
@@ -103,13 +115,16 @@ export function createSovereignCockpitServer(
     }
 
     if (url.pathname === '/api/run-pipeline' && req.method === 'POST') {
-      const { bundle } = exportAuditDossierAndBundle(dbPath, outDir);
-      const verification = verifyEvidenceBundle(bundle);
+      const exported = exportAuditDossierAndBundle(dbPath, outDir);
+      const verification = verifyEvidenceBundle(exported.bundle);
+      const atlas = exportEternalCartridgeAndAtlas(exported.bundle, outDir, [], exported.quarantine, dbPath);
       sendJson(res, 200, {
         pipelineExecuted: true,
+        atlasReloaded: true,
+        atlasPath: atlas.atlasPath,
         version: LOGOS_VERSION,
-        merkleRoot: bundle.merkleRoot,
-        keyId: bundle.keyId,
+        merkleRoot: exported.bundle.merkleRoot,
+        keyId: exported.bundle.keyId,
         verification
       });
       return;
@@ -118,13 +133,27 @@ export function createSovereignCockpitServer(
     if (url.pathname === '/') {
       const html = `<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><title>LOGOS-OS-Core v${LOGOS_VERSION} — Sovereign Cockpit</title></head>
+<head><meta charset="utf-8"><title>LOGOS-OS-Core v${LOGOS_VERSION} — Live Playground Cockpit</title></head>
 <body style="font-family:system-ui,sans-serif;background:#090d16;color:#e2e8f0;padding:2rem">
-  <h1>LOGOS-OS-Core v${LOGOS_VERSION} — Interactive Sovereign Cockpit (${LOOPBACK_HOST})</h1>
-  <p>Zero-Dependency · Loopback Only · Belnap-4 · E-Graph · Ed25519 Verified</p>
-  <button id="btn-refresh" type="button" style="padding:8px 14px;background:#0284c7;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-right:8px">Refresh Status</button>
-  <button id="btn-audit" type="button" style="padding:8px 14px;background:#059669;color:#fff;border:none;border-radius:4px;cursor:pointer">Run One-Click Audit</button>
-  <pre id="cockpit-output" style="margin-top:16px;padding:12px;background:#020617;border:1px solid #1e293b;border-radius:6px">Loading cockpit telemetry...</pre>
+  <h1>LOGOS-OS-Core v${LOGOS_VERSION} — Interactive Live Playground Cockpit (${LOOPBACK_HOST})</h1>
+  <p>Zero-Dependency · Loopback Only · Belnap-4 Playground · E-Graph Saturation · 9-Stage Audit</p>
+  <div style="margin:12px 0;padding:12px;border:1px solid #1e293b;border-radius:6px;background:#0f172a">
+    Belnap-4 Entity: </label>
+    
+    <button id="btn-belnap" type="button" style="padding:6px 12px;background:#0284c7;color:#fff;border:none;border-radius:4px;cursor:pointer">Evaluate Belnap-4</button>
+  </div>
+  <div style="margin:12px 0;padding:12px;border:1px solid #1e293b;border-radius:6px;background:#0f172a">
+    <label for="egraph-lhs">LHS: </label>
+    <input id="egraph-lhs" type="text" value="1 * (x + 0)" style="padding:6px;background:#020617;color:#f8fafc;border:1px solid #334155;border-radius:4px;margin-right:6px" />
+    <label for="egraph-rhs">RHS: </label>
+    <input id="egraph-rhs" type="text" value="x" style="padding:6px;background:#020617;color:#f8fafc;border:1px solid #334155;border-radius:4px;margin-right:6px" />
+    <button id="btn-egraph" type="button" style="padding:6px 12px;background:#7c3aed;color:#fff;border:none;border-radius:4px;cursor:pointer">Check E-Graph</button>
+  </div>
+  <div style="margin:12px 0">
+    <button id="btn-refresh" type="button" style="padding:8px 14px;background:#334155;color:#fff;border:none;border-radius:4px;cursor:pointer;margin-right:8px">Refresh Status</button>
+    <button id="btn-audit" type="button" style="padding:8px 14px;background:#059669;color:#fff;border:none;border-radius:4px;cursor:pointer">Run 9-Stage Audit &amp; Reload Atlas</button>
+  </div>
+  <pre id="cockpit-output" style="margin-top:16px;padding:12px;background:#020617;border:1px solid #1e293b;border-radius:6px">Loading playground...</pre>
   <script src="/cockpit-ui.js"></script>
 </body>
 </html>`;
@@ -146,6 +175,6 @@ if (process.argv.at(1) === fileURLToPath(import.meta.url)) {
   const port = Number.parseInt(process.env.LOGOS_PORT ?? '4173', 10);
   const server = createSovereignCockpitServer(DEFAULT_DB_PATH, DIST_DIR);
   server.listen(port, LOOPBACK_HOST, () => {
-    console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} SOVEREIGN COCKPIT LISTENING ON http://${LOOPBACK_HOST}:${port}`);
+    console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} LIVE PLAYGROUND COCKPIT LISTENING ON http://${LOOPBACK_HOST}:${port}`);
   });
 }

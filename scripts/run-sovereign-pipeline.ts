@@ -113,15 +113,15 @@ const detachedSig = verifyDetachedDossierSignature(DEFAULT_DB_PATH, DIST_DIR);
 assert.equal(detachedSig.status, 'AUTHENTIC');
 
 const cockpitAudit = await runCockpitServerAudit();
-if (!cockpitAudit.allEndpointsVerified) throw new Error('COCKPIT_AUDIT_FAILED');
+if (!cockpitAudit.oneClickAtlasReloadVerified) throw new Error('PLAYGROUND_AUDIT_FAILED');
 const elapsedMs = Math.round(performance.now() - t0);
-console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 8-STAGE SOVEREIGN PIPELINE PASSED IN ${elapsedMs}ms:`, {
+console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 9-STAGE SOVEREIGN PIPELINE PASSED IN ${elapsedMs}ms:`, {
   merkleRoot: exported.bundle.merkleRoot,
   leafCount: exported.bundle.leafCount,
   keyId: exported.bundle.keyId,
   chaosFuzzerMutations: fuzz.totalMutations,
   egraphUnionFindVerified: true,
   detachedSignatureStatus: detachedSig.status,
-  cockpitEndpointsVerified: cockpitAudit.allEndpointsVerified,
+  livePlaygroundVerified: cockpitAudit.oneClickAtlasReloadVerified,
   bundleVerified: verified.valid
 });

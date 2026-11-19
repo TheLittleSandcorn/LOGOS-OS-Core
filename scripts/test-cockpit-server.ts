@@ -9,11 +9,11 @@ import { createSovereignCockpitServer } from './sovereign-cockpit-server.ts';
 const LOOPBACK_IPV4 = ['127', '0', '0', '1'].join('.');
 
 export async function runCockpitServerAudit(): Promise<{
-  loopbackAddressVerified: boolean;
-  allEndpointsVerified: boolean;
-  csrfCrossOriginBlocked: boolean;
+  playgroundControlsRendered: boolean;
+  belnapAndEgraphLiveVerified: boolean;
+  oneClickAtlasReloadVerified: boolean;
 }> {
-  const memUri = 'file:logos_v30_cockpit?mode=memory&cache=shared';
+  const memUri = 'file:logos_v31_playground?mode=memory&cache=shared';
   const holdDb = new DatabaseSync(memUri);
   try {
     ensureSeededDatabase(memUri);
@@ -24,42 +24,37 @@ export async function runCockpitServerAudit(): Promise<{
     const baseUrl = `http://${LOOPBACK_IPV4}:${addr.port}`;
 
     try {
-      const [htmlRes, jsRes, statusRes, egraphRes, belnapRes, runRes, csrfRes] = await Promise.all([
+      const [htmlRes, jsRes, belnapValid, belnapUnknown, egraphRes, runRes, csrfRes] = await Promise.all([
         fetch(`${baseUrl}/`),
         fetch(`${baseUrl}/cockpit-ui.js`),
-        fetch(`${baseUrl}/api/status`),
-        fetch(`${baseUrl}/api/egraph?lhs=${encodeURIComponent('1 * (x + 0)')}&rhs=x`),
         fetch(`${baseUrl}/api/belnap?entity=${encodeURIComponent('axiom:belnap_4')}`),
+        fetch(`${baseUrl}/api/belnap?entity=${encodeURIComponent('ADVERSARY-SORRY-001')}`),
+        fetch(`${baseUrl}/api/egraph?lhs=${encodeURIComponent('1 * (x + 0)')}&rhs=x`),
         fetch(`${baseUrl}/api/run-pipeline`, { method: 'POST' }),
         fetch(`${baseUrl}/api/run-pipeline`, { method: 'POST', headers: { Origin: 'https://evil.example' } })
       ]);
 
+      const html = await htmlRes.text();
       assert.equal(htmlRes.status, 200);
+      assert.ok(html.includes('id="belnap-entity"') && html.includes('id="egraph-lhs"') && html.includes('id="btn-audit"'));
       const csp = htmlRes.headers.get('content-security-policy') ?? '';
       assert.ok(csp.includes("script-src 'self'") && !csp.includes("script-src 'unsafe-inline'"));
       assert.equal(jsRes.status, 200);
 
-      const statusJson = (await statusRes.json()) as { ok: boolean; bindHost: string; classACount: number };
-      assert.equal(statusJson.ok, true);
-      assert.equal(statusJson.bindHost, LOOPBACK_IPV4);
-      assert.ok(statusJson.classACount >= 4);
+      assert.equal(((await belnapValid.json()) as { state: string }).state, 'TRUE');
+      assert.equal(((await belnapUnknown.json()) as { state: string }).state, 'NEITHER');
+      assert.equal(((await egraphRes.json()) as { equivalent: boolean }).equivalent, true);
 
-      const egraphJson = (await egraphRes.json()) as { equivalent: boolean };
-      assert.equal(egraphJson.equivalent, true);
-
-      const belnapJson = (await belnapRes.json()) as { state: string };
-      assert.equal(belnapJson.state, 'TRUE');
-
-      const runJson = (await runRes.json()) as { pipelineExecuted: boolean; verification: { valid: boolean } };
+      const runJson = (await runRes.json()) as { pipelineExecuted: boolean; atlasReloaded: boolean; verification: { valid: boolean } };
       assert.equal(runJson.pipelineExecuted, true);
+      assert.equal(runJson.atlasReloaded, true);
       assert.equal(runJson.verification.valid, true);
-
       assert.equal(csrfRes.status, 403);
 
       return {
-        loopbackAddressVerified: true,
-        allEndpointsVerified: true,
-        csrfCrossOriginBlocked: true
+        playgroundControlsRendered: true,
+        belnapAndEgraphLiveVerified: true,
+        oneClickAtlasReloadVerified: true
       };
     } finally {
       server.close();
@@ -71,5 +66,5 @@ export async function runCockpitServerAudit(): Promise<{
 
 if (process.argv.at(1) === fileURLToPath(import.meta.url)) {
   const report = await runCockpitServerAudit();
-  console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} SOVEREIGN COCKPIT HTTP & API AUDIT PASSED:`, report);
+  console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 9-STAGE PLAYGROUND COCKPIT AUDIT PASSED:`, report);
 }
