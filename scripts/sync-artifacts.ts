@@ -3,7 +3,7 @@ import fs from 'node:fs';
 export function syncAllSovereignArtifacts(snap: { merkleRoot: string; leafCount: number }) {
   fs.mkdirSync('dist', { recursive: true });
   const content = [
-    '# LOGOS-OS-Core v4.8.2 Sovereign Manifest',
+    '# LOGOS-OS-Core v4.8.3 Sovereign Manifest',
     `merkleRoot: ${snap.merkleRoot}`,
     `leafCount: ${snap.leafCount}`,
     `syncedAt: ${new Date().toISOString()}`,

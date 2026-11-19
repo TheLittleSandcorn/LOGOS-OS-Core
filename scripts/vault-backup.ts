@@ -9,7 +9,7 @@ export function encryptVaultKey(privateKeyPem: string, passphrase: string, outPa
   const ciphertext = Buffer.concat([cipher.update(privateKeyPem, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
   const payload = {
-    version: '4.8.2',
+    version: '4.8.3',
     kdf: 'scrypt',
     cipher: 'aes-256-gcm',
     salt: salt.toString('hex'),

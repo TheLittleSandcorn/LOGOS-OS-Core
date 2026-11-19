@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 import { DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
 import { ensureSeededDatabase } from '../kernel/seed-bootstrap.ts';
-import { createSovereignCockpitServer } from './sovereign-cockpit-server.ts';
+import { createSovereignCockpitServer , SESSION_TOKEN } from './sovereign-cockpit-server.ts';
 
 const LOOPBACK_IPV4 = ['127', '0', '0', '1'].join('.');
 
@@ -28,10 +28,12 @@ export async function runCockpitServerAudit(): Promise<{
       assert.match(bdl.merkleRoot, /^[a-f0-9]{64}$/);
       assert.ok(bdl.leafCount >= 4);
 
-      const cln = (await (await fetch(`${baseUrl}/api/backups`, { method: 'DELETE' })).json()) as { cleaned: boolean };
+      const unauthAttest = await fetch(`${baseUrl}/api/attest`, { method: 'POST' });
+      assert.equal(unauthAttest.status, 401);
+      const cln = (await (await fetch(`${baseUrl}/api/backups`, { method: 'DELETE', headers: { 'X-Logos-Token': SESSION_TOKEN } })).json()) as { cleaned: boolean };
       assert.equal(cln.cleaned, true);
 
-      await fetch(`${baseUrl}/api/run-pipeline`, { method: 'POST' });
+      await fetch(`${baseUrl}/api/run-pipeline`, { method: 'POST', headers: { 'X-Logos-Token': SESSION_TOKEN } });
       return { portableBundleEndpointVerified: true, backupCleanupEndpointVerified: true, evidenceBundleButtonRendered: true };
     } finally { server.close(); }
   } finally { holdDb.close(); }

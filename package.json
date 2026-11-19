@@ -1,6 +1,6 @@
 {
   "name": "logos-os-core",
-  "version": "4.8.2",
+  "version": "4.8.3",
   "private": false,
   "type": "module",
   "description": "Zero-dependency TypeScript & Node.js cryptographic verification core with SQLite EAVT ledger, SHA-256 Merkle proofs, Ed25519 trust anchor, Belnap-4 logic, and a 127.0.0.1 Sovereign Cockpit.",
@@ -10,17 +10,17 @@
     "node": ">=22.6.0"
   },
   "scripts": {
-    "sovereign": "node scripts/run-sovereign-pipeline.ts",
-    "verify-bundle": "node bricks/graph-memory/bundle-verifier.ts",
-    "query": "node scripts/query-knowledge.ts",
-    "immune": "node scripts/test-immune-system.ts",
-    "integrity": "node scripts/verify-ledger-integrity.ts",
-    "fuzz": "node scripts/fuzz-sovereign-seed.ts",
-    "sign": "node scripts/sign-sovereign-ledger.ts",
-    "perimeter": "node scripts/test-security-perimeter.ts",
-    "verify-sig": "node scripts/verify-dossier-signature.ts",
-    "cockpit": "node scripts/sovereign-cockpit-server.ts",
-    "test-cockpit": "node scripts/test-cockpit-server.ts",
-    "health": "node scripts/health-check.ts"
+    "sovereign": "node --import ./scripts/kernel-egress-lock.ts scripts/run-sovereign-pipeline.ts",
+    "verify-bundle": "node --import ./scripts/kernel-egress-lock.ts bricks/graph-memory/bundle-verifier.ts",
+    "query": "node --import ./scripts/kernel-egress-lock.ts scripts/query-knowledge.ts",
+    "immune": "node --import ./scripts/kernel-egress-lock.ts scripts/test-immune-system.ts",
+    "integrity": "node --import ./scripts/kernel-egress-lock.ts scripts/verify-ledger-integrity.ts",
+    "fuzz": "node --import ./scripts/kernel-egress-lock.ts scripts/fuzz-sovereign-seed.ts",
+    "sign": "node --import ./scripts/kernel-egress-lock.ts scripts/sign-sovereign-ledger.ts",
+    "perimeter": "node --import ./scripts/kernel-egress-lock.ts scripts/test-security-perimeter.ts",
+    "verify-sig": "node --import ./scripts/kernel-egress-lock.ts scripts/verify-dossier-signature.ts",
+    "cockpit": "node --import ./scripts/kernel-egress-lock.ts scripts/sovereign-cockpit-server.ts",
+    "test-cockpit": "node --import ./scripts/kernel-egress-lock.ts scripts/test-cockpit-server.ts",
+    "health": "node --import ./scripts/kernel-egress-lock.ts scripts/health-check.ts"
   }
 }
