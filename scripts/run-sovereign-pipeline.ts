@@ -1,3 +1,4 @@
+import { runCockpitServerAudit } from './test-cockpit-server.ts';
 import { runSecurityPerimeterAudit } from './test-security-perimeter.ts';
 import { runEd25519LedgerSignAudit } from './sign-sovereign-ledger.ts';
 import { runChaosSeedFuzzer } from './fuzz-sovereign-seed.ts';
@@ -95,6 +96,8 @@ if (!verified.valid || !existsSync(llmsPath) || !atlasContent.includes('class="a
   throw new Error('ORCHESTRATOR_VERIFICATION_FAILED');
 }
 
+const cockpitAudit = await runCockpitServerAudit();
+if (!cockpitAudit.liveVerifyEndpointValid) throw new Error('COCKPIT_AUDIT_FAILED');
 const elapsedMs = Math.round(performance.now() - t0);
 console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} ONE-COMMAND SOVEREIGN ORCHESTRATOR PASSED IN ${elapsedMs}ms:`, {
   merkleRoot: exported.bundle.merkleRoot,
@@ -103,5 +106,6 @@ console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} ONE-COMMAND SOVEREIGN ORCHESTRATOR 
   killSwitchAuditVerified: true,
   belnap4LiveBadgesRendered: true,
   fourLayerIntegrityVerified: true,
+  cockpitCspZeroInlineVerified: cockpitAudit.cspZeroInlineVerified,
   bundleVerified: verified.valid
 });
