@@ -113,7 +113,7 @@ const detachedSig = verifyDetachedDossierSignature(DEFAULT_DB_PATH, DIST_DIR);
 assert.equal(detachedSig.status, 'AUTHENTIC');
 
 const cockpitAudit = await runCockpitServerAudit();
-if (!cockpitAudit.sqliteEgraphPersistenceVerified || !cockpitAudit.dossierDialogModalRendered) throw new Error('SQLITE_EGRAPH_AUDIT_FAILED');
+if (!cockpitAudit.crossOrigin403GuardVerified || !cockpitAudit.twoInstanceRestartPersistenceVerified) throw new Error('TWO_INSTANCE_AUDIT_FAILED');
 const elapsedMs = Math.round(performance.now() - t0);
 console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 9-STAGE SOVEREIGN PIPELINE PASSED IN ${elapsedMs}ms:`, {
   merkleRoot: exported.bundle.merkleRoot,
@@ -122,7 +122,7 @@ console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 9-STAGE SOVEREIGN PIPELINE PASSED I
   chaosFuzzerMutations: fuzz.totalMutations,
   egraphUnionFindVerified: true,
   detachedSignatureStatus: detachedSig.status,
-  sqliteEgraphPersisted: cockpitAudit.sqliteEgraphPersistenceVerified,
-  dossierDialogModalRendered: cockpitAudit.dossierDialogModalRendered,
+  crossOrigin403GuardVerified: cockpitAudit.crossOrigin403GuardVerified,
+  twoInstanceRestartVerified: cockpitAudit.twoInstanceRestartPersistenceVerified,
   bundleVerified: verified.valid
 });

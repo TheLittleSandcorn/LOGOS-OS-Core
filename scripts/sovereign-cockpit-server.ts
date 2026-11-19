@@ -77,7 +77,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
     if (req.method === 'POST') {
       const origin = req.headers.origin;
       if (origin && !origin.startsWith(`http://${LOOPBACK_HOST}`) && !origin.startsWith('http://localhost')) {
-        sendJson(res, 403, { error: 'FORBIDDEN_CROSS_ORIGIN_MUTATION' });
+        sendJson(res, 403, { error: 'FORBIDDEN_CROSS_ORIGIN' });
         return;
       }
     }
@@ -97,7 +97,9 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
         db.prepare('INSERT OR REPLACE INTO egraph_rules (lhs, rhs, created_seq) VALUES (?, ?, ?)').run(lhs, rhs, seqRow.maxSeq + 1);
       } finally { db.close(); }
       const merged = liveEgraph.union(lhs, rhs);
-      sendJson(res, 200, { ruleLearned: true, persistedInSqlite: true, lhs, rhs, canonicalRoot: merged.root, equivalent: liveEgraph.areEquivalent(lhs, rhs) });
+      const exported = exportAuditDossierAndBundle(dbPath, outDir);
+      exportEternalCartridgeAndAtlas(exported.bundle, outDir, [], exported.quarantine, dbPath);
+      sendJson(res, 200, { ruleLearned: true, persistedInSqlite: true, dossierAutoResigned: true, lhs, rhs, canonicalRoot: merged.root, equivalent: liveEgraph.areEquivalent(lhs, rhs) });
       return;
     }
     if (url.pathname.startsWith('/artifacts/') && url.pathname.endsWith('.html')) {
