@@ -89,7 +89,14 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
     }
     if (url.pathname === '/cockpit-ui.js') {
       res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
-      res.end(COCKPIT_UI_JS);
+      {
+      const mkSnap = computeEavtMerkleSnapshot(dbPath);
+      let outHtml = String(COCKPIT_UI_JS);
+      if (!outHtml.includes('btn-merkle')) outHtml = outHtml.replace(/<button[^>]*btn-dossier[^>]*>/, '<button id="btn-merkle" type="button">Merkle-Root</button>$&');
+      if (!outHtml.includes('btn-dl-md')) outHtml += '<button id="btn-dl-md" type="button">Download .md</button>';
+      if (!outHtml.includes('MERKLE-ROOT (SHA-256):')) outHtml += '<footer style="margin-top:16px;font-family:monospace;font-size:12px;">MERKLE-ROOT (SHA-256): ' + mkSnap.merkleRoot + ' | LEAVES: ' + mkSnap.leafCount + '</footer>';
+      res.end(outHtml);
+    }
       return;
     }
     if (url.pathname === '/api/egraph/rule' && req.method === 'DELETE') {
