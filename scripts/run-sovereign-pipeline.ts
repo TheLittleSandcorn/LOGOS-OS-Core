@@ -1,3 +1,4 @@
+import { runCockpitServerAudit } from './test-cockpit-server.ts';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
@@ -111,6 +112,8 @@ if (!verified.valid || !existsSync(llmsPath) || !atlasContent.includes('class="a
 const detachedSig = verifyDetachedDossierSignature(DEFAULT_DB_PATH, DIST_DIR);
 assert.equal(detachedSig.status, 'AUTHENTIC');
 
+const cockpitAudit = await runCockpitServerAudit();
+if (!cockpitAudit.allEndpointsVerified) throw new Error('COCKPIT_AUDIT_FAILED');
 const elapsedMs = Math.round(performance.now() - t0);
 console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 8-STAGE SOVEREIGN PIPELINE PASSED IN ${elapsedMs}ms:`, {
   merkleRoot: exported.bundle.merkleRoot,
@@ -119,5 +122,6 @@ console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 8-STAGE SOVEREIGN PIPELINE PASSED I
   chaosFuzzerMutations: fuzz.totalMutations,
   egraphUnionFindVerified: true,
   detachedSignatureStatus: detachedSig.status,
+  cockpitEndpointsVerified: cockpitAudit.allEndpointsVerified,
   bundleVerified: verified.valid
 });
