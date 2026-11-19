@@ -15,19 +15,20 @@ import { ensureSeededDatabase } from '../kernel/seed-bootstrap.ts';
 import { exportEternalCartridgeAndAtlas } from './export-eternal-artifact.ts';
 
 const LOOPBACK_HOST = ['127', '0', '0', '1'].join('.');
-const CSP_HEADER = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
+const CSP_HEADER = "default-src 'self'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'";
 
 const COCKPIT_UI_JS = [
   "function renderOut(t, p) { const o = document.getElementById('cockpit-output'); if (o) o.textContent = JSON.stringify({ section: t, payload: p }, null, 2); }",
-  "async function refreshStatus() { renderOut('SYSTEM_STATUS', await fetch('/api/status').then(r => r.json())); }",
-  "async function ingestTheorem() { const body = { id: document.getElementById('thm-id')?.value || '', claim: document.getElementById('thm-claim')?.value || '', leanHeader: document.getElementById('thm-lean')?.value || '', critiqueK: document.getElementById('thm-k')?.value || '', dependsOn: document.getElementById('thm-deps')?.value || '' }; const r = await fetch('/api/ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); renderOut('INGEST_' + r.status, await r.json()); }",
+  "async function refreshStatus() { const st = await fetch('/api/status').then(r => r.json()); const bar = document.getElementById('telemetry-bar'); if (bar) bar.textContent = 'Key-ID: ' + st.keyFingerprint + ' | CLASS_A: ' + st.classACount + ' | E-Graph Rules: ' + st.egraphRuleCount; renderOut('SYSTEM_STATUS', st); }",
+  "async function ingestTheorem() { const body = { id: document.getElementById('thm-id')?.value || '', claim: document.getElementById('thm-claim')?.value || '', leanHeader: document.getElementById('thm-lean')?.value || '', critiqueK: document.getElementById('thm-k')?.value || '', dependsOn: document.getElementById('thm-deps')?.value || '' }; const r = await fetch('/api/ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); renderOut('INGEST_' + r.status, await r.json()); await refreshStatus(); }",
   "async function checkBelnap() { const e = document.getElementById('belnap-entity')?.value || 'axiom:belnap_4'; renderOut('BELNAP_4', await fetch('/api/belnap?entity=' + encodeURIComponent(e)).then(r => r.json())); }",
   "async function triggerRetract() { const e = document.getElementById('belnap-entity')?.value || 'axiom:belnap_4'; renderOut('RETRACT', await fetch('/api/retract?entity=' + encodeURIComponent(e), { method: 'POST' }).then(r => r.json())); }",
   "async function triggerRecover() { const e = document.getElementById('belnap-entity')?.value || 'axiom:belnap_4'; renderOut('RECOVER', await fetch('/api/recover?entity=' + encodeURIComponent(e), { method: 'POST' }).then(r => r.json())); }",
   "async function openDossierModal() { const ds = await fetch('/api/dossier').then(r => r.json()); renderOut('ED25519_DOSSIER', ds); const dlg = document.getElementById('dosDlg'); const pre = document.getElementById('dosDlgContent'); if (pre) pre.textContent = 'STATUS: ' + (ds.authentic ? 'AUTHENTIC' : 'INVALID') + ' | KEY-ID: ' + ds.keyId + '\\n\\n' + ds.dossierMarkdown; if (dlg && typeof dlg.showModal === 'function') dlg.showModal(); }",
   "async function checkEgraph() { const l = document.getElementById('egraph-lhs')?.value || '1 * (x + 0)'; const r = document.getElementById('egraph-rhs')?.value || 'x'; renderOut('EGRAPH_QUERY', await fetch('/api/egraph?lhs=' + encodeURIComponent(l) + '&rhs=' + encodeURIComponent(r)).then(r => r.json())); }",
-  "async function learnEgraphRule() { const lhs = document.getElementById('egraph-lhs')?.value || ''; const rhs = document.getElementById('egraph-rhs')?.value || ''; renderOut('EGRAPH_SQLITE_PERSISTED', await fetch('/api/egraph/union', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lhs, rhs }) }).then(r => r.json())); }",
-  "async function runLiveAudit() { renderOut('FULL_AUDIT', await fetch('/api/run-pipeline', { method: 'POST' }).then(r => r.json())); }",
+  "async function learnEgraphRule() { const lhs = document.getElementById('egraph-lhs')?.value || ''; const rhs = document.getElementById('egraph-rhs')?.value || ''; renderOut('EGRAPH_LEARNED', await fetch('/api/egraph/union', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lhs, rhs }) }).then(r => r.json())); await refreshStatus(); }",
+  "async function deleteEgraphRule() { const lhs = document.getElementById('egraph-lhs')?.value || ''; renderOut('EGRAPH_DELETED', await fetch('/api/egraph/rule?lhs=' + encodeURIComponent(lhs), { method: 'DELETE' }).then(r => r.json())); await refreshStatus(); }",
+  "async function runLiveAudit() { renderOut('FULL_AUDIT', await fetch('/api/run-pipeline', { method: 'POST' }).then(r => r.json())); await refreshStatus(); }",
   "document.getElementById('btn-ingest')?.addEventListener('click', ingestTheorem);",
   "document.getElementById('btn-refresh')?.addEventListener('click', refreshStatus);",
   "document.getElementById('btn-belnap')?.addEventListener('click', checkBelnap);",
@@ -37,6 +38,7 @@ const COCKPIT_UI_JS = [
   "document.getElementById('btn-close-dos')?.addEventListener('click', () => document.getElementById('dosDlg')?.close());",
   "document.getElementById('btn-egraph')?.addEventListener('click', checkEgraph);",
   "document.getElementById('btn-egraph-union')?.addEventListener('click', learnEgraphRule);",
+  "document.getElementById('btn-egraph-del')?.addEventListener('click', deleteEgraphRule);",
   "document.getElementById('btn-audit')?.addEventListener('click', runLiveAudit);",
   "window.addEventListener('DOMContentLoaded', refreshStatus);"
 ].join('\n');
@@ -70,11 +72,11 @@ function hydrateEgraphFromSqlite(dbPath: string): EGraphEquivalenceEngine {
 }
 
 export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, outDir: string = DIST_DIR): Server {
-  const liveEgraph = hydrateEgraphFromSqlite(dbPath);
+  let liveEgraph = hydrateEgraphFromSqlite(dbPath);
 
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${LOOPBACK_HOST}`);
-    if (req.method === 'POST') {
+    if (req.method === 'POST' || req.method === 'DELETE') {
       const origin = req.headers.origin;
       if (origin && !origin.startsWith(`http://${LOOPBACK_HOST}`) && !origin.startsWith('http://localhost')) {
         sendJson(res, 403, { error: 'FORBIDDEN_CROSS_ORIGIN' });
@@ -84,6 +86,19 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
     if (url.pathname === '/cockpit-ui.js') {
       res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
       res.end(COCKPIT_UI_JS);
+      return;
+    }
+    if (url.pathname === '/api/egraph/rule' && req.method === 'DELETE') {
+      const lhs = (url.searchParams.get('lhs') ?? '').trim();
+      if (!lhs) { sendJson(res, 400, { error: 'MISSING_LHS' }); return; }
+      const db = new DatabaseSync(dbPath);
+      let deleted = 0;
+      try { deleted = Number(db.prepare('DELETE FROM egraph_rules WHERE lhs = ?').run(lhs).changes); }
+      finally { db.close(); }
+      liveEgraph = hydrateEgraphFromSqlite(dbPath);
+      const exported = exportAuditDossierAndBundle(dbPath, outDir);
+      exportEternalCartridgeAndAtlas(exported.bundle, outDir, [], exported.quarantine, dbPath);
+      sendJson(res, 200, { deleted, lhs, atlasAndDossierResigned: true });
       return;
     }
     if (url.pathname === '/api/egraph/union' && req.method === 'POST') {
@@ -204,7 +219,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       return;
     }
     if (url.pathname === '/') {
-      const html = '\x3c!doctype html>\x3chtml>\x3chead>\x3cmeta charset="utf-8">\x3ctitle>LOGOS-OS-Core Cockpit\x3c/title>\x3c/head>\x3cbody style="background:#090d16;color:#e2e8f0;font-family:sans-serif;padding:2rem">\x3ch1>LOGOS-OS-Core v' + LOGOS_VERSION + ' Persistent SQLite E-Graph &amp; Dossier Modal Cockpit\x3c/h1>\x3cdiv>\x3cinput id="thm-id" placeholder="Theorem ID" />\x3cinput id="thm-claim" placeholder="Claim" />\x3cinput id="thm-lean" placeholder="Lean Header" />\x3cinput id="thm-k" placeholder="Critique K" />\x3cinput id="thm-deps" placeholder="depends_on" />\x3cbutton id="btn-ingest">Ingest &amp; Auto-Sign\x3c/button>\x3c/div>\x3cdiv>\x3cinput id="belnap-entity" value="axiom:belnap_4" />\x3cbutton id="btn-belnap">Belnap-4\x3c/button>\x3cbutton id="btn-retract">Retract\x3c/button>\x3cbutton id="btn-recover">Recover\x3c/button>\x3cbutton id="btn-dossier">Ed25519 Dossier\x3c/button>\x3c/div>\x3cdiv>\x3cinput id="egraph-lhs" value="1 * (x + 0)" />\x3cinput id="egraph-rhs" value="x" />\x3cbutton id="btn-egraph">Check E-Graph\x3c/button>\x3cbutton id="btn-egraph-union">Regel lernen\x3c/button>\x3cbutton id="btn-refresh">Status\x3c/button>\x3cbutton id="btn-audit">Run Audit\x3c/button>\x3c/div>\x3cpre id="cockpit-output">Loading...\x3c/pre>\x3cdialog id="dosDlg" style="background:#0f172a;color:#f8fafc;border:1px solid #38bdf8;border-radius:8px;max-width:720px;padding:1.5rem">\x3cbutton id="btn-close-dos">Close Dossier\x3c/button>\x3cpre id="dosDlgContent" style="white-space:pre-wrap">\x3c/pre>\x3c/dialog>\x3cscript src="/cockpit-ui.js">\x3c/script>\x3c/body>\x3c/html>';
+      const html = '\x3c!doctype html>\x3chtml>\x3chead>\x3cmeta charset="utf-8">\x3ctitle>LOGOS-OS-Core Cockpit\x3c/title>\x3c/head>\x3cbody style="background:#090d16;color:#e2e8f0;font-family:sans-serif;padding:2rem">\x3ch1>LOGOS-OS-Core v' + LOGOS_VERSION + ' Offline-CSP &amp; Live Telemetry Cockpit\x3c/h1>\x3cdiv id="telemetry-bar" style="padding:8px 12px;background:#0f172a;border:1px solid #334155;border-radius:6px;margin-bottom:12px">Loading live telemetry...\x3c/div>\x3cdiv>\x3cinput id="thm-id" placeholder="Theorem ID" />\x3cinput id="thm-claim" placeholder="Claim" />\x3cinput id="thm-lean" placeholder="Lean Header" />\x3cinput id="thm-k" placeholder="Critique K" />\x3cinput id="thm-deps" placeholder="depends_on" />\x3cbutton id="btn-ingest">Ingest &amp; Auto-Sign\x3c/button>\x3c/div>\x3cdiv>\x3cinput id="belnap-entity" value="axiom:belnap_4" />\x3cbutton id="btn-belnap">Belnap-4\x3c/button>\x3cbutton id="btn-retract">Retract\x3c/button>\x3cbutton id="btn-recover">Recover\x3c/button>\x3cbutton id="btn-dossier">Ed25519 Dossier\x3c/button>\x3c/div>\x3cdiv>\x3cinput id="egraph-lhs" value="1 * (x + 0)" />\x3cinput id="egraph-rhs" value="x" />\x3cbutton id="btn-egraph">Check E-Graph\x3c/button>\x3cbutton id="btn-egraph-union">Regel lernen\x3c/button>\x3cbutton id="btn-egraph-del">Regel l\u00f6schen\x3c/button>\x3cbutton id="btn-refresh">Status\x3c/button>\x3cbutton id="btn-audit">Run Audit\x3c/button>\x3c/div>\x3cpre id="cockpit-output">Loading...\x3c/pre>\x3cdialog id="dosDlg" style="background:#0f172a;color:#f8fafc;border:1px solid #38bdf8;border-radius:8px;max-width:720px;padding:1.5rem">\x3cbutton id="btn-close-dos">Close Dossier\x3c/button>\x3cpre id="dosDlgContent" style="white-space:pre-wrap">\x3c/pre>\x3c/dialog>\x3cscript src="/cockpit-ui.js">\x3c/script>\x3c/body>\x3c/html>';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
       res.end(html);
       return;
@@ -216,5 +231,8 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
 if (process.argv.at(1) === fileURLToPath(import.meta.url)) {
   const port = Number.parseInt(process.env.LOGOS_PORT ?? '4173', 10);
   const server = createSovereignCockpitServer(DEFAULT_DB_PATH, DIST_DIR);
-  server.listen(port, LOOPBACK_HOST, () => console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} SQLITE E-GRAPH COCKPIT ON http://${LOOPBACK_HOST}:${port}`));
+  const shutdown = () => { server.close(() => process.exit(0)); };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+  server.listen(port, LOOPBACK_HOST, () => console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} OFFLINE-CSP COCKPIT ON http://${LOOPBACK_HOST}:${port}`));
 }
