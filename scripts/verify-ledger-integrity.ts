@@ -42,7 +42,7 @@ export function runFullIntegrityAudit(dbPath: string = DEFAULT_DB_PATH, outDir: 
     const hashMatch = html.match(/id="expected-hash">([a-f0-9]{64})</);
     const payloadMatch = html.match(/id="payload">([\s\S]*?)<\/pre>/);
     assert.ok(hashMatch && payloadMatch, 'CARTRIDGE_TAGS_MISSING');
-    assert.equal(createHash('sha256').update(payloadMatch!, 'utf8').digest('hex'), hashMatch, 'CARTRIDGE_SHA256_TAMPERED');
+    assert.equal(createHash('sha256').update(payloadMatch.at(1)!, 'utf8').digest('hex'), hashMatch.at(1)!, 'CARTRIDGE_SHA256_TAMPERED');
     cartridgeSha256Verified = true;
   }
 
