@@ -6,7 +6,8 @@ import { DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
 
 export function exportEternalCartridgeAndAtlas(
   bundle: EvidenceBundle,
-  outDir: string = DIST_DIR
+  outDir: string = DIST_DIR,
+  retractedEntities: string[] = []
 ): { cartridgePath: string; atlasPath: string; cartridgeSha256: string } {
   mkdirSync(outDir, { recursive: true });
   const canonicalPayload = JSON.stringify({
@@ -39,18 +40,52 @@ export function exportEternalCartridgeAndAtlas(
 </body>
 </html>`;
 
+  const retractionBanner =
+    retractedEntities.length > 0
+      ? `<div id="retraction-radar" style="background:#7f1d1d;color:#fecaca;padding:12px;border-radius:6px;margin:12px 0"><strong>RETRACTION RADAR ACTIVE:</strong> ${retractedEntities.join(', ')} [CONFLICT_RETRACTED]</div>`
+      : `<div id="retraction-radar" style="background:#064e3b;color:#a7f3d0;padding:12px;border-radius:6px;margin:12px 0"><strong>RETRACTION RADAR CLEAR:</strong> 0 active cascade retractions.</div>`;
+
   const atlasHtml = `<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><title>LOGOS-OS-Core v${LOGOS_VERSION} — Sovereign Master Atlas</title></head>
 <body style="font-family:system-ui,sans-serif;background:#090d16;color:#e2e8f0;padding:2rem">
   <h1>LOGOS-OS-Core v${LOGOS_VERSION} — Sovereign Master Atlas</h1>
   <p><strong>Merkle-Root (SHA-256):</strong> <code>${bundle.merkleRoot}</code> | <strong>Leaves:</strong> ${bundle.leafCount} | <strong>Key-ID:</strong> <code>${bundle.keyId}</code></p>
+  ${retractionBanner}
+  <section style="margin:16px 0;padding:12px;border:1px solid #334155;border-radius:8px">
+    <h2 style="margin-top:0">Interactive 60-FPS Irrationality Bound (&mu;) Explorer</h2>
+    <label for="mu-slider">Bound &mu;: <span id="mu-val">2.00</span></label>
+    <input id="mu-slider" type="range" min="1.5" max="7.5" step="0.05" value="2.0" />
+    <canvas id="formula-canvas" width="560" height="140" style="display:block;margin-top:10px;background:#020617;border:1px solid #1e293b"></canvas>
+  </section>
   <ul>
     <li><code>axiom:zero_dependency</code> — runtime = node&gt;=22.6.0 [CLASS_A]</li>
     <li><code>axiom:loopback_only</code> — bind_host = 127.0.0.1 [CLASS_A]</li>
     <li><code>axiom:belnap_4</code> — logic_states = TRUE|FALSE|BOTH|NEITHER [CLASS_A]</li>
     <li><code>axiom:anti_a_quarantine</code> — contradiction_policy = ISOLATE_CLASS_B [CLASS_A]</li>
   </ul>
+  <script>
+    const canvas = document.getElementById('formula-canvas');
+    const ctx = canvas.getContext('2d');
+    const slider = document.getElementById('mu-slider');
+    const label = document.getElementById('mu-val');
+    function renderFrame() {
+      const mu = parseFloat(slider.value);
+      label.textContent = mu.toFixed(2);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let x = 0; x < canvas.width; x++) {
+        const q = 1 + (x / canvas.width) * 12;
+        const y = canvas.height - 15 - Math.min(110, (110 / Math.pow(q, mu * 0.45)));
+        if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      requestAnimationFrame(renderFrame);
+    }
+    requestAnimationFrame(renderFrame);
+  </script>
 </body>
 </html>`;
 

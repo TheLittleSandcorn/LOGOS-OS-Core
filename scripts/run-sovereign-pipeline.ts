@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
+import { DatabaseSync } from 'node:sqlite';
 import { exportLlmsTxtManifest } from '../bricks/cosci-bridge/export-llms-manifest.ts';
 import { admitFormalTheorem } from '../bricks/cosci-bridge/formal-theorem-gate.ts';
 import { evaluateCoSciAdmission } from '../bricks/cosci-bridge/knowledge-bridge.ts';
@@ -18,6 +19,7 @@ import { validateKernelBusMessage } from '../kernel/bus-router.ts';
 import { DEFAULT_DB_PATH, DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
 import { ensureSeededDatabase } from '../kernel/seed-bootstrap.ts';
 import { exportEternalCartridgeAndAtlas } from './export-eternal-artifact.ts';
+import { retractEntityWithCascade, searchKnowledgeLedger } from './query-knowledge.ts';
 
 const t0 = performance.now();
 
@@ -30,6 +32,22 @@ reg.switchMode(MODE_STRICT_PROOF);
 assert.equal(reg.hasPolicy(POLICY_WRITE_CLASS_A), true);
 
 ensureSeededDatabase(DEFAULT_DB_PATH);
+
+const hits = searchKnowledgeLedger('belnap', DEFAULT_DB_PATH);
+assert.ok(hits.length >= 1);
+
+// Test recursive WITH RECURSIVE retraction cascade on an isolated :memory: DB
+const memCascadePath = 'file:logos_v21_cascade?mode=memory&cache=shared';
+const holdDb = new DatabaseSync(memCascadePath);
+try {
+  ensureSeededDatabase(memCascadePath);
+  holdDb.exec('CREATE TABLE IF NOT EXISTS lineage_edges (parent_entity TEXT NOT NULL, child_entity TEXT NOT NULL, PRIMARY KEY (parent_entity, child_entity))');
+  holdDb.exec("INSERT OR IGNORE INTO lineage_edges VALUES ('family:root', 'family:child_a'), ('family:child_a', 'family:grandchild_b')");
+  const cascade = retractEntityWithCascade('family:root', memCascadePath);
+  assert.deepEqual(cascade.affectedEntities, ['family:root', 'family:child_a', 'family:grandchild_b']);
+} finally {
+  holdDb.close();
+}
 
 assert.equal(evaluateBelnapFusion(true, true), 'BOTH');
 assert.equal(classifyEpistemicAdmission('BOTH').quarantined, true);
@@ -51,8 +69,9 @@ const exported = exportAuditDossierAndBundle(DEFAULT_DB_PATH, DIST_DIR);
 const verified = verifyEvidenceBundle(exported.bundle);
 const llmsPath = exportLlmsTxtManifest(exported.bundle, DIST_DIR);
 const eternal = exportEternalCartridgeAndAtlas(exported.bundle, DIST_DIR);
-if (!verified.valid || !existsSync(llmsPath) || !existsSync(eternal.cartridgePath) || !existsSync(eternal.atlasPath)) {
-  throw new Error('EVIDENCE_OR_ETERNAL_ARTIFACT_FAILED');
+const atlasContent = readFileSync(eternal.atlasPath, 'utf8');
+if (!verified.valid || !existsSync(llmsPath) || !atlasContent.includes('formula-canvas') || !atlasContent.includes('retraction-radar')) {
+  throw new Error('EVIDENCE_OR_CANVAS_ATLAS_FAILED');
 }
 
 const elapsedMs = Math.round(performance.now() - t0);
@@ -60,8 +79,8 @@ console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} SOVEREIGN PIPELINE PASSED IN ${elap
   merkleRoot: exported.bundle.merkleRoot,
   leafCount: exported.bundle.leafCount,
   keyId: exported.bundle.keyId,
-  zeroPageAbiVerified: true,
-  fkTwinGateVerified: true,
-  eternalCartridgeExported: true,
+  cliSearchHits: hits.length,
+  recursiveRetractionCascade: true,
+  canvasAtlasExported: true,
   bundleVerified: verified.valid
 });
