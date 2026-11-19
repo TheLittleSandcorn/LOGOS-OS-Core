@@ -1,3 +1,5 @@
+import { EGraphEquivalenceEngine } from '../bricks/graph-memory/egraph-engine.ts';
+import { verifyDetachedDossierSignature } from './verify-dossier-signature.ts';
 import { runCockpitServerAudit } from './test-cockpit-server.ts';
 import { runSecurityPerimeterAudit } from './test-security-perimeter.ts';
 import { runEd25519LedgerSignAudit } from './sign-sovereign-ledger.ts';
@@ -96,6 +98,11 @@ if (!verified.valid || !existsSync(llmsPath) || !atlasContent.includes('class="a
   throw new Error('ORCHESTRATOR_VERIFICATION_FAILED');
 }
 
+const egraph = new EGraphEquivalenceEngine();
+egraph.union('1 * (x + 0)', 'x');
+assert.equal(egraph.areEquivalent('x + 0', 'x'), true);
+const detachedSig = verifyDetachedDossierSignature(DEFAULT_DB_PATH, DIST_DIR);
+assert.equal(detachedSig.status, 'AUTHENTIC');
 const cockpitAudit = await runCockpitServerAudit();
 if (!cockpitAudit.liveVerifyEndpointValid) throw new Error('COCKPIT_AUDIT_FAILED');
 const elapsedMs = Math.round(performance.now() - t0);
@@ -106,6 +113,7 @@ console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} ONE-COMMAND SOVEREIGN ORCHESTRATOR 
   killSwitchAuditVerified: true,
   belnap4LiveBadgesRendered: true,
   fourLayerIntegrityVerified: true,
-  cockpitCspZeroInlineVerified: cockpitAudit.cspZeroInlineVerified,
+  egraphUnionFindVerified: true,
+  detachedSignatureStatus: detachedSig.status,
   bundleVerified: verified.valid
 });

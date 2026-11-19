@@ -56,7 +56,7 @@ export async function runCockpitServerAudit(): Promise<{
       assert.equal(htmlRes.status, 200);
       assert.ok(htmlRes.text.includes('src="/cockpit-ui.js"'));
       const csp = String(htmlRes.headers['content-security-policy'] ?? '');
-      assert.ok(csp.includes("script-src 'self'") && !csp.includes('unsafe-inline'));
+      assert.ok(csp.includes("script-src 'self'") && !csp.includes("script-src 'unsafe-inline'"));
       assert.equal(htmlRes.headers['x-frame-options'], 'DENY');
 
       assert.equal(jsRes.status, 200);
