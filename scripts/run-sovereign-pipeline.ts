@@ -122,6 +122,7 @@ console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 9-STAGE SOVEREIGN PIPELINE PASSED I
   chaosFuzzerMutations: fuzz.totalMutations,
   egraphUnionFindVerified: true,
   detachedSignatureStatus: detachedSig.status,
-  livePlaygroundVerified: cockpitAudit.oneClickAtlasReloadVerified,
+  dossierEd25519LiveAuthentic: cockpitAudit.dossierEd25519LiveAuthentic,
+  paraconsistentRetractRecoverVerified: cockpitAudit.paraconsistentRetractRecoverCycleVerified,
   bundleVerified: verified.valid
 });
