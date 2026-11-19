@@ -1,0 +1,17 @@
+{
+  "name": "logos-os-core",
+  "version": "1.0.0",
+  "private": false,
+  "type": "module",
+  "description": "Zero-dependency TypeScript & Node.js cryptographic verification core with SQLite EAVT ledger, SHA-256 Merkle proofs, Ed25519 trust anchor, Belnap-4 logic, and a 127.0.0.1 Sovereign Cockpit.",
+  "license": "MIT",
+  "author": "Luciano Umut Tunc <https://orcid.org>",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "sovereign": "node scripts/run-sovereign-pipeline.ts",
+    "verify-bundle": "node bricks/graph-memory/bundle-verifier.ts",
+    "cockpit": "node scripts/sovereign-cockpit-server.ts"
+  }
+}

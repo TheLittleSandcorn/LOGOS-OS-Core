@@ -1,0 +1,13 @@
+{
+  "schema": "LOGOS-OS-CORE.CANONICAL_SEED.v1",
+  "ddl": [
+    "CREATE TABLE IF NOT EXISTS eavt_ledger (seq INTEGER PRIMARY KEY AUTOINCREMENT, entity TEXT NOT NULL, attribute TEXT NOT NULL, value TEXT NOT NULL, truth_state TEXT NOT NULL, confidence REAL NOT NULL, epistemic_class TEXT NOT NULL, retracted_by_seq INTEGER)",
+    "CREATE TABLE IF NOT EXISTS egraph_rules (lhs TEXT PRIMARY KEY, rhs TEXT NOT NULL, created_seq INTEGER NOT NULL)"
+  ],
+  "axioms": [
+    { "entity": "axiom:zero_dependency", "attribute": "runtime", "value": "node>=22.6.0", "truth_state": "TRUE", "confidence": 1.0, "epistemic_class": "CLASS_A" },
+    { "entity": "axiom:loopback_only", "attribute": "bind_host", "value": "127.0.0.1", "truth_state": "TRUE", "confidence": 1.0, "epistemic_class": "CLASS_A" },
+    { "entity": "axiom:belnap_4", "attribute": "logic_states", "value": "TRUE|FALSE|BOTH|NEITHER", "truth_state": "TRUE", "confidence": 1.0, "epistemic_class": "CLASS_A" },
+    { "entity": "axiom:anti_a_quarantine", "attribute": "contradiction_policy", "value": "ISOLATE_CLASS_B", "truth_state": "TRUE", "confidence": 1.0, "epistemic_class": "CLASS_A" }
+  ]
+}
