@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { basename, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -25,7 +25,8 @@ const COCKPIT_UI_JS = [
   "async function triggerRetract() { const e = document.getElementById('belnap-entity')?.value || 'axiom:belnap_4'; renderOut('RETRACT', await fetch('/api/retract?entity=' + encodeURIComponent(e), { method: 'POST' }).then(r => r.json())); }",
   "async function triggerRecover() { const e = document.getElementById('belnap-entity')?.value || 'axiom:belnap_4'; renderOut('RECOVER', await fetch('/api/recover?entity=' + encodeURIComponent(e), { method: 'POST' }).then(r => r.json())); }",
   "async function checkDossier() { renderOut('ED25519_DOSSIER', await fetch('/api/dossier').then(r => r.json())); }",
-  "async function checkEgraph() { const l = document.getElementById('egraph-lhs')?.value || '1 * (x + 0)'; const r = document.getElementById('egraph-rhs')?.value || 'x'; renderOut('EGRAPH', await fetch('/api/egraph?lhs=' + encodeURIComponent(l) + '&rhs=' + encodeURIComponent(r)).then(r => r.json())); }",
+  "async function checkEgraph() { const l = document.getElementById('egraph-lhs')?.value || '1 * (x + 0)'; const r = document.getElementById('egraph-rhs')?.value || 'x'; renderOut('EGRAPH_QUERY', await fetch('/api/egraph?lhs=' + encodeURIComponent(l) + '&rhs=' + encodeURIComponent(r)).then(r => r.json())); }",
+  "async function learnEgraphRule() { const lhs = document.getElementById('egraph-lhs')?.value || ''; const rhs = document.getElementById('egraph-rhs')?.value || ''; renderOut('EGRAPH_UNION_LEARNED', await fetch('/api/egraph/union', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lhs, rhs }) }).then(r => r.json())); }",
   "async function runLiveAudit() { renderOut('FULL_AUDIT', await fetch('/api/run-pipeline', { method: 'POST' }).then(r => r.json())); }",
   "document.getElementById('btn-ingest')?.addEventListener('click', ingestTheorem);",
   "document.getElementById('btn-refresh')?.addEventListener('click', refreshStatus);",
@@ -34,6 +35,7 @@ const COCKPIT_UI_JS = [
   "document.getElementById('btn-recover')?.addEventListener('click', triggerRecover);",
   "document.getElementById('btn-dossier')?.addEventListener('click', checkDossier);",
   "document.getElementById('btn-egraph')?.addEventListener('click', checkEgraph);",
+  "document.getElementById('btn-egraph-union')?.addEventListener('click', learnEgraphRule);",
   "document.getElementById('btn-audit')?.addEventListener('click', runLiveAudit);",
   "window.addEventListener('DOMContentLoaded', refreshStatus);"
 ].join('\n');
@@ -55,6 +57,9 @@ function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
 }
 
 export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, outDir: string = DIST_DIR): Server {
+  const liveEgraph = new EGraphEquivalenceEngine();
+  liveEgraph.union('1 * (x + 0)', 'x');
+
   return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${LOOPBACK_HOST}`);
     if (req.method === 'POST') {
@@ -70,11 +75,19 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       return;
     }
     if (url.pathname.startsWith('/artifacts/') && url.pathname.endsWith('.html')) {
-      const safeName = basename(url.pathname);
-      const artPath = join(outDir, 'artifacts', safeName);
+      const artPath = join(outDir, 'artifacts', basename(url.pathname));
       if (!existsSync(artPath)) { sendJson(res, 404, { error: 'ARTIFACT_NOT_FOUND' }); return; }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Content-Type-Options': 'nosniff' });
       res.end(readFileSync(artPath, 'utf8'));
+      return;
+    }
+    if (url.pathname === '/api/egraph/union' && req.method === 'POST') {
+      const body = await readJsonBody(req);
+      const lhs = String(body.lhs ?? '').trim();
+      const rhs = String(body.rhs ?? '').trim();
+      if (!lhs || !rhs) { sendJson(res, 400, { error: 'MISSING_LHS_OR_RHS' }); return; }
+      const merged = liveEgraph.union(lhs, rhs);
+      sendJson(res, 200, { ruleLearned: true, lhs, rhs, canonicalRoot: merged.root, equivalent: liveEgraph.areEquivalent(lhs, rhs) });
       return;
     }
     if (url.pathname === '/api/ingest' && req.method === 'POST') {
@@ -102,10 +115,13 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       } finally { db.close(); }
       const exported = exportAuditDossierAndBundle(dbPath, outDir);
       const eternal = exportEternalCartridgeAndAtlas(exported.bundle, outDir, [], exported.quarantine, dbPath);
-      mkdirSync(join(outDir, 'artifacts'), { recursive: true });
+      const artDir = join(outDir, 'artifacts');
+      mkdirSync(artDir, { recursive: true });
+      const cartridgeHtml = readFileSync(eternal.cartridgePath, 'utf8');
       const artifactUrl = `/artifacts/${id.replace(/[^a-zA-Z0-9_-]/g, '_')}.html`;
-      writeFileSync(join(outDir, artifactUrl), readFileSync(eternal.cartridgePath, 'utf8'), 'utf8');
-      sendJson(res, 200, { admitted: true, id, dependsOn: dependsOn || null, autoResignedEd25519: true, artifactUrl, merkleRoot: exported.bundle.merkleRoot });
+      writeFileSync(join(outDir, artifactUrl), cartridgeHtml, 'utf8');
+      for (const f of readdirSync(artDir).filter((n) => n.endsWith('.html'))) writeFileSync(join(artDir, f), cartridgeHtml, 'utf8');
+      sendJson(res, 200, { admitted: true, id, autoResignedEd25519: true, syncedArtifactsCount: readdirSync(artDir).length, artifactUrl, merkleRoot: exported.bundle.merkleRoot });
       return;
     }
     if (url.pathname === '/api/status') {
@@ -152,9 +168,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
     if (url.pathname === '/api/egraph') {
       const lhs = url.searchParams.get('lhs') ?? '1 * (x + 0)';
       const rhs = url.searchParams.get('rhs') ?? 'x';
-      const eg = new EGraphEquivalenceEngine();
-      eg.union('1 * (x + 0)', 'x');
-      sendJson(res, 200, { lhs, rhs, equivalent: eg.areEquivalent(lhs, rhs), canonicalRoot: eg.find(lhs) });
+      sendJson(res, 200, { lhs, rhs, equivalent: liveEgraph.areEquivalent(lhs, rhs), canonicalRoot: liveEgraph.find(lhs) });
       return;
     }
     if (url.pathname === '/api/belnap') {
@@ -169,7 +183,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       return;
     }
     if (url.pathname === '/') {
-      const html = '<!doctype html><html><head><meta charset="utf-8"><title>LOGOS-OS-Core Cockpit</title></head><body style="background:#090d16;color:#e2e8f0;font-family:sans-serif;padding:2rem"><h1>LOGOS-OS-Core v' + LOGOS_VERSION + ' Lineage & Auto-Signed Cockpit</h1><div><input id="thm-id" placeholder="Theorem ID" /><input id="thm-claim" placeholder="Claim" /><input id="thm-lean" placeholder="Lean Header" /><input id="thm-k" placeholder="Critique K" /><input id="thm-deps" placeholder="depends_on" /><button id="btn-ingest">Ingest & Auto-Sign</button></div><div><button id="btn-belnap">Belnap-4</button><button id="btn-retract">Retract</button><button id="btn-recover">Recover</button><button id="btn-dossier">Verify Ed25519 Dossier</button></div><div><input id="egraph-lhs" value="1 * (x + 0)" /><input id="egraph-rhs" value="x" /><button id="btn-egraph">E-Graph</button><button id="btn-refresh">Status</button><button id="btn-audit">Run Audit</button></div><pre id="cockpit-output">Loading...</pre><script src="/cockpit-ui.js"></script></body></html>';
+      const html = '<!doctype html><html><head><meta charset="utf-8"><title>LOGOS-OS-Core Cockpit</title></head><body style="background:#090d16;color:#e2e8f0;font-family:sans-serif;padding:2rem"><h1>LOGOS-OS-Core v' + LOGOS_VERSION + ' E-Graph Learner &amp; Auto-Cartridge Cockpit</h1><div><input id="thm-id" placeholder="Theorem ID" /><input id="thm-claim" placeholder="Claim" /><input id="thm-lean" placeholder="Lean Header" /><input id="thm-k" placeholder="Critique K" /><input id="thm-deps" placeholder="depends_on" /><button id="btn-ingest">Ingest &amp; Auto-Sign</button></div><div><button id="btn-belnap">Belnap-4</button><button id="btn-retract">Retract</button><button id="btn-recover">Recover</button><button id="btn-dossier">Verify Ed25519 Dossier</button></div><div><input id="egraph-lhs" value="1 * (x + 0)" /><input id="egraph-rhs" value="x" /><button id="btn-egraph">Check E-Graph</button><button id="btn-egraph-union">Regel lernen</button><button id="btn-refresh">Status</button><button id="btn-audit">Run Audit</button></div><pre id="cockpit-output">Loading...</pre><script src="/cockpit-ui.js"></script></body></html>';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff' });
       res.end(html);
       return;
@@ -181,5 +195,5 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
 if (process.argv.at(1) === fileURLToPath(import.meta.url)) {
   const port = Number.parseInt(process.env.LOGOS_PORT ?? '4173', 10);
   const server = createSovereignCockpitServer(DEFAULT_DB_PATH, DIST_DIR);
-  server.listen(port, LOOPBACK_HOST, () => console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} LINEAGE COCKPIT ON http://${LOOPBACK_HOST}:${port}`));
+  server.listen(port, LOOPBACK_HOST, () => console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} E-GRAPH LEARNER COCKPIT ON http://${LOOPBACK_HOST}:${port}`));
 }

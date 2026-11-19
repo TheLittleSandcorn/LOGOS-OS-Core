@@ -113,7 +113,7 @@ const detachedSig = verifyDetachedDossierSignature(DEFAULT_DB_PATH, DIST_DIR);
 assert.equal(detachedSig.status, 'AUTHENTIC');
 
 const cockpitAudit = await runCockpitServerAudit();
-if (!cockpitAudit.lineageIngestAndAutoResignVerified || !cockpitAudit.artifactRouteServed) throw new Error('LINEAGE_AUDIT_FAILED');
+if (!cockpitAudit.egraphRuleLearnerTransitiveVerified || !cockpitAudit.autoCartridgeSyncVerified) throw new Error('EGRAPH_LEARNER_AUDIT_FAILED');
 const elapsedMs = Math.round(performance.now() - t0);
 console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 9-STAGE SOVEREIGN PIPELINE PASSED IN ${elapsedMs}ms:`, {
   merkleRoot: exported.bundle.merkleRoot,
@@ -122,8 +122,7 @@ console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 9-STAGE SOVEREIGN PIPELINE PASSED I
   chaosFuzzerMutations: fuzz.totalMutations,
   egraphUnionFindVerified: true,
   detachedSignatureStatus: detachedSig.status,
-  lineageAutoResignVerified: cockpitAudit.lineageIngestAndAutoResignVerified,
-  artifactServerVerified: cockpitAudit.artifactRouteServed,
-  monotonicRecoveryVerified: cockpitAudit.monotonicNonDestructiveRecoveryVerified,
+  egraphRuleLearnerVerified: cockpitAudit.egraphRuleLearnerTransitiveVerified,
+  autoCartridgeSyncVerified: cockpitAudit.autoCartridgeSyncVerified,
   bundleVerified: verified.valid
 });
