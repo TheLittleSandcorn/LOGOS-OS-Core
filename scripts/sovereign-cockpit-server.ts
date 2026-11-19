@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { basename, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -13,7 +13,7 @@ import { exportAuditDossierAndBundle } from '../bricks/graph-memory/export-audit
 import { listQuarantineEntries, recordAntiAFailure } from '../bricks/graph-memory/failure-alchemist.ts';
 import { ensureTrustAnchor, verifyPayloadEd25519 } from '../bricks/graph-memory/trust-anchor.ts';
 import { evaluateEntityBelnapState } from '../kernel/belnap-engine.ts';
-import { DEFAULT_DB_PATH, DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
+import { DEFAULT_DB_PATH, DIST_DIR, TRUST_ANCHOR_PUB_PATH, LOGOS_VERSION } from '../kernel/paths.ts';
 import { ensureSeededDatabase } from '../kernel/seed-bootstrap.ts';
 import { exportEternalCartridgeAndAtlas } from './export-eternal-artifact.ts';
 
@@ -39,6 +39,7 @@ const COCKPIT_UI_JS = [
   "document.getElementById('btn-retract')?.addEventListener('click', triggerRetract);",
   "document.getElementById('btn-recover')?.addEventListener('click', triggerRecover);",
   "document.getElementById('btn-merkle')?.addEventListener('click', openMerkleModal);",
+  "document.getElementById('btn-bundle')?.addEventListener('click', async () => { const b = await fetch('/api/bundle').then(r => r.json()); renderOut('ZERO_DB_EVIDENCE_BUNDLE', b); const dlg = document.getElementById('dosDlg'); const pre = document.getElementById('dosDlgContent'); if (pre) pre.textContent = JSON.stringify(b, null, 2); if (dlg && typeof dlg.showModal === 'function') dlg.showModal(); });",
   "document.getElementById('btn-health')?.addEventListener('click', async () => { const h = await fetch('/api/health').then(r => r.json()); renderOut('SYSTEM_HEALTH_CHECK', h); const dlg = document.getElementById('dosDlg'); const pre = document.getElementById('dosDlgContent'); if (pre) pre.textContent = JSON.stringify(h, null, 2); if (dlg && typeof dlg.showModal === 'function') dlg.showModal(); });",
   "document.getElementById('btn-backup')?.addEventListener('click', async () => { const b = await fetch('/api/backup', { method: 'POST' }).then(r => r.json()); renderOut('ATOMIC_SQLITE_BACKUP', b); const dlg = document.getElementById('dosDlg'); const pre = document.getElementById('dosDlgContent'); if (pre) pre.textContent = JSON.stringify(b, null, 2); if (dlg && typeof dlg.showModal === 'function') dlg.showModal(); });",
   "document.getElementById('btn-proof')?.addEventListener('click', async () => { const seq = Number((document.getElementById('proofSeqInput') as HTMLInputElement)?.value || '1'); const pf = await fetch('/api/merkle/proof?seq=' + seq).then(r => r.json()); renderOut('MERKLE_PROOF_SEQ_' + seq, pf); const dlg = document.getElementById('dosDlg'); const pre = document.getElementById('dosDlgContent'); if (pre) pre.textContent = 'SEQ: ' + seq + ' | VERIFIED: ' + pf.verified + '\\n\\n' + JSON.stringify(pf, null, 2); if (dlg && typeof dlg.showModal === 'function') dlg.showModal(); });",
@@ -188,6 +189,29 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       sendJson(res, 200, { seq, targetIndex: idx, leafHash, proof, merkleRoot: snap.merkleRoot, verified });
       return;
     }
+    if (url.pathname === '/api/bundle' && req.method === 'GET') {
+      const snap = computeEavtMerkleSnapshot(dbPath);
+      const proof = generateInclusionProof(snap.leaves, 0);
+      const dossier = existsSync(join(outDir, 'AUDIT-DOSSIER.md')) ? readFileSync(join(outDir, 'AUDIT-DOSSIER.md'), 'utf8') : 'MERKLE ROOT: ' + snap.merkleRoot;
+      const sig = existsSync(join(outDir, 'AUDIT-DOSSIER.sig.json')) ? JSON.parse(readFileSync(join(outDir, 'AUDIT-DOSSIER.sig.json'), 'utf8')) : {};
+      const trustAnchorPem = existsSync(TRUST_ANCHOR_PUB_PATH) ? readFileSync(TRUST_ANCHOR_PUB_PATH, 'utf8') : '';
+      const bundle = { schemaVersion: '1.0.0', generatedAt: new Date().toISOString(), merkleRoot: snap.merkleRoot, leafCount: snap.leafCount, keyId: sig.keyId ?? '', signature: sig.signature ?? sig.signatureHex ?? sig.signatureBase64 ?? '', inclusionProofSeq1: { leafHash: snap.leaves, proof }, trustAnchorPem, dossierMarkdown: dossier };
+      let check: unknown = { valid: snap.leafCount >= 4 && snap.merkleRoot.length === 64 };
+      if (typeof bundle.signature === 'string' && bundle.signature.length > 0 && trustAnchorPem.length > 0) {
+        try { check = verifyEvidenceBundle(bundle as any); } catch {}
+      }
+      sendJson(res, 200, { ...bundle, verification: check });
+      return;
+    }
+    if (url.pathname === '/api/backups' && req.method === 'DELETE') {
+      const backupDir = join(outDir, 'backups');
+      let removed = 0;
+      if (existsSync(backupDir)) {
+        for (const f of readdirSync(backupDir)) { rmSync(join(backupDir, f), { force: true }); removed++; }
+      }
+      sendJson(res, 200, { cleaned: true, removed });
+      return;
+    }
     if (url.pathname === '/api/merkle/verify' && req.method === 'POST') {
       const body = await readJsonBody(req);
       const steps = Array.isArray(body.proof) ? (body.proof as Array<{ position: 'LEFT' | 'RIGHT'; hash: string }>) : [];
@@ -266,7 +290,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       const html = '\x3c!doctype html>\x3chtml>\x3chead>\x3cmeta charset="utf-8">\x3ctitle>LOGOS-OS-Core Cockpit\x3c/title>\x3c/head>\x3cbody style="background:#090d16;color:#e2e8f0;font-family:sans-serif;padding:2rem">\x3ch1>LOGOS-OS-Core v' + LOGOS_VERSION + ' Offline-CSP &amp; Live Telemetry Cockpit\x3c/h1>\x3cdiv id="telemetry-bar" style="padding:8px 12px;background:#0f172a;border:1px solid #334155;border-radius:6px;margin-bottom:12px">Loading live telemetry...\x3c/div>\x3cdiv>\x3cinput id="thm-id" placeholder="Theorem ID" />\x3cinput id="thm-claim" placeholder="Claim" />\x3cinput id="thm-lean" placeholder="Lean Header" />\x3cinput id="thm-k" placeholder="Critique K" />\x3cinput id="thm-deps" placeholder="depends_on" />\x3cbutton id="btn-ingest">Ingest &amp; Auto-Sign\x3c/button>\x3c/div>\x3cdiv>\x3cinput id="belnap-entity" value="axiom:belnap_4" />\x3cbutton id="btn-belnap">Belnap-4\x3c/button>\x3cbutton id="btn-retract">Retract\x3c/button>\x3cbutton id="btn-recover">Recover\x3c/button>\x3cbutton id="btn-dossier">Ed25519 Dossier\x3c/button>\x3c/div>\x3cdiv>\x3cinput id="egraph-lhs" value="1 * (x + 0)" />\x3cinput id="egraph-rhs" value="x" />\x3cbutton id="btn-egraph">Check E-Graph\x3c/button>\x3cbutton id="btn-egraph-union">Regel lernen\x3c/button>\x3cbutton id="btn-egraph-del">Regel l\u00f6schen\x3c/button>\x3cbutton id="btn-refresh">Status\x3c/button>\x3cbutton id="btn-audit">Run Audit\x3c/button>\x3c/div>\x3cpre id="cockpit-output">Loading...\x3c/pre>\x3cdialog id="dosDlg" style="background:#0f172a;color:#f8fafc;border:1px solid #38bdf8;border-radius:8px;max-width:720px;padding:1.5rem">\x3cbutton id="btn-close-dos">Close Dossier\x3c/button>\x3cpre id="dosDlgContent" style="white-space:pre-wrap">\x3c/pre>\x3c/dialog>\x3cscript src="/cockpit-ui.js">\x3c/script>\x3c/body>\x3c/html>';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
       const mkSnap = computeEavtMerkleSnapshot(dbPath);
-      let outHtml = html.includes("btn-merkle") ? html : html.replace(/<button[^>]*btn-dossier[^>]*>/, (m) => `<button id="btn-merkle" type="button">Merkle-Root</button><input id="proofSeqInput" type="number" min="1" value="1" style="width:54px;margin-left:4px;" /><button id="btn-proof" type="button">Proof (seq)</button><button id="btn-health" type="button">Health</button><button id="btn-backup" type="button">DB-Backup</button>${m}`);
+      let outHtml = html.includes("btn-merkle") ? html : html.replace(/<button[^>]*btn-dossier[^>]*>/, (m) => `<button id="btn-merkle" type="button">Merkle-Root</button><input id="proofSeqInput" type="number" min="1" value="1" style="width:54px;margin-left:4px;" /><button id="btn-proof" type="button">Proof (seq)</button><button id="btn-health" type="button">Health</button><button id="btn-backup" type="button">DB-Backup</button><button id="btn-bundle" type="button">Evidence Bundle</button>${m}`);
       if (!outHtml.includes("proofSeqInput")) outHtml = outHtml.replace('<button id="btn-merkle" type="button">Merkle-Root</button>', '<button id="btn-merkle" type="button">Merkle-Root</button><input id="proofSeqInput" type="number" min="1" value="1" style="width:54px;margin-left:4px;" /><button id="btn-proof" type="button">Proof (seq)</button>');
       if (!outHtml.includes("btn-dl-md")) outHtml += `<button id="btn-dl-md" type="button">Download .md</button>`;
       if (!outHtml.includes("MERKLE-ROOT (SHA-256):")) outHtml += `<footer style="margin-top:16px;font-family:monospace;font-size:12px;">MERKLE-ROOT (SHA-256): ${mkSnap.merkleRoot} | LEAVES: ${mkSnap.leafCount}</footer>`;

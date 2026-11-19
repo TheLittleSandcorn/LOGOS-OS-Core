@@ -113,7 +113,7 @@ const detachedSig = verifyDetachedDossierSignature(DEFAULT_DB_PATH, DIST_DIR);
 assert.equal(detachedSig.status, 'AUTHENTIC');
 
 const cockpitAudit = await runCockpitServerAudit();
-if (!cockpitAudit.zeroTrustVerifyEndpointPassed || !cockpitAudit.tamperedProofRejected || !cockpitAudit.atomicBackupSnapshotVerified || !cockpitAudit.healthAndBackupButtonsRendered) throw new Error('VERIFY_BACKUP_AUDIT_FAILED');
+if (!cockpitAudit.portableBundleEndpointVerified || !cockpitAudit.backupCleanupEndpointVerified || !cockpitAudit.evidenceBundleButtonRendered) throw new Error('BUNDLE_CLEANUP_AUDIT_FAILED');
 const finalSync = exportAuditDossierAndBundle(DEFAULT_DB_PATH, DIST_DIR);
 assert.equal(verifyEvidenceBundle(finalSync.bundle).valid, true);
 const elapsedMs = Math.round(performance.now() - t0);
@@ -124,9 +124,8 @@ console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 9-STAGE SOVEREIGN PIPELINE PASSED I
   chaosFuzzerMutations: fuzz.totalMutations,
   egraphUnionFindVerified: true,
   detachedSignatureStatus: detachedSig.status,
-  zeroTrustVerifyEndpointPassed: cockpitAudit.zeroTrustVerifyEndpointPassed,
-  tamperedProofRejected: cockpitAudit.tamperedProofRejected,
-  atomicBackupSnapshotVerified: cockpitAudit.atomicBackupSnapshotVerified,
-  healthAndBackupButtonsRendered: cockpitAudit.healthAndBackupButtonsRendered,
+  portableBundleEndpointVerified: cockpitAudit.portableBundleEndpointVerified,
+  backupCleanupEndpointVerified: cockpitAudit.backupCleanupEndpointVerified,
+  evidenceBundleButtonRendered: cockpitAudit.evidenceBundleButtonRendered,
   bundleVerified: verified.valid
 });
