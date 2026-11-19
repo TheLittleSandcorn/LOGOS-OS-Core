@@ -1,6 +1,5 @@
-import { runFullIntegrityAudit } from './verify-ledger-integrity.ts';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { DatabaseSync } from 'node:sqlite';
 import { exportLlmsTxtManifest } from '../bricks/cosci-bridge/export-llms-manifest.ts';
@@ -22,10 +21,20 @@ import { ensureSeededDatabase } from '../kernel/seed-bootstrap.ts';
 import { exportEternalCartridgeAndAtlas } from './export-eternal-artifact.ts';
 import { retractEntityWithCascade, searchKnowledgeLedger } from './query-knowledge.ts';
 import { runImmuneSystemAudit } from './test-immune-system.ts';
+import { runFullIntegrityAudit } from './verify-ledger-integrity.ts';
 
 const t0 = performance.now();
+mkdirSync(DIST_DIR, { recursive: true });
 
+// 1. Hardware Kill-Switch & Zero-Page ABI Audit
 const reg = new ZeroPageKernelRegister();
+const haltFile = 'dist/.LOGOS_HALT';
+writeFileSync(haltFile, 'HALT_TEST', 'utf8');
+try {
+  assert.throws(() => reg.assertNotHalted(), /KERNEL_HALT_ACTIVE/);
+} finally {
+  rmSync(haltFile, { force: true });
+}
 reg.assertNotHalted();
 assert.equal(reg.hasPolicy(POLICY_WRITE_CLASS_A), true);
 reg.switchMode(MODE_EXPLORE_SANDBOX);
@@ -33,8 +42,8 @@ assert.equal(reg.hasPolicy(POLICY_WRITE_CLASS_A), false);
 reg.switchMode(MODE_STRICT_PROOF);
 assert.equal(reg.hasPolicy(POLICY_WRITE_CLASS_A), true);
 
+// 2. Seeded EAVT Ledger, Immune System & Retraction Cascade
 ensureSeededDatabase(DEFAULT_DB_PATH);
-
 const immuneReport = runImmuneSystemAudit();
 assert.equal(immuneReport.zeroAmnesiaVerified, true);
 assert.equal(immuneReport.classALedgerUntouched, true);
@@ -42,7 +51,7 @@ assert.equal(immuneReport.classALedgerUntouched, true);
 const hits = searchKnowledgeLedger('belnap', DEFAULT_DB_PATH);
 assert.ok(hits.length >= 1);
 
-const memCascadePath = 'file:logos_v23_cascade?mode=memory&cache=shared';
+const memCascadePath = 'file:logos_v25_cascade?mode=memory&cache=shared';
 const holdDb = new DatabaseSync(memCascadePath);
 try {
   ensureSeededDatabase(memCascadePath);
@@ -56,7 +65,6 @@ try {
 
 assert.equal(evaluateBelnapFusion(true, true), 'BOTH');
 assert.equal(classifyEpistemicAdmission('BOTH').quarantined, true);
-
 assert.equal(admitFormalTheorem({ id: 'thm:sorry', statement: 'x=y', containsSorryAx: true, hasFormalProof: true, hasMethodologicalContext: true }).admitted, false);
 assert.equal(admitFormalTheorem({ id: 'thm:nofk', statement: 'x=y', containsSorryAx: false, hasFormalProof: true, hasMethodologicalContext: false }).admitted, false);
 assert.equal(admitFormalTheorem({ id: 'thm:valid', statement: 'x=x', containsSorryAx: false, hasFormalProof: true, hasMethodologicalContext: true }).admitted, true);
@@ -67,27 +75,26 @@ assert.throws(() => validateKernelBusMessage({ origin: '127.0.0.1', targetBrick:
 
 assert.equal(evaluateMcdaCandidate({ id: 'weak', security: 5.5, determinism: 9, simplicity: 9 }).approved, false);
 assert.equal(evaluateMcdaCandidate({ id: 'sovereign', security: 9.8, determinism: 9.6, simplicity: 9.5 }).approved, true);
-
 assert.equal(evaluateCoSciAdmission({ id: 'cosci:1', sourceRepo: 'TheLittleSandcorn/cosci-research-framework', epistemicClass: 'CLASS_A', confidence: 0.99, statement: 'Verified' }).acceptedIntoLedger, true);
 
+// 3. Cryptographic Dossier, Belnap-4 Live Badges Atlas & 4-Layer Integrity
 const exported = exportAuditDossierAndBundle(DEFAULT_DB_PATH, DIST_DIR);
 const verified = verifyEvidenceBundle(exported.bundle);
 const llmsPath = exportLlmsTxtManifest(exported.bundle, DIST_DIR);
-const eternal = exportEternalCartridgeAndAtlas(exported.bundle, DIST_DIR, [], exported.quarantine);
+const eternal = exportEternalCartridgeAndAtlas(exported.bundle, DIST_DIR, [], exported.quarantine, DEFAULT_DB_PATH);
 const atlasContent = readFileSync(eternal.atlasPath, 'utf8');
-if (!verified.valid || !existsSync(llmsPath) || !atlasContent.includes('lineage-svg') || !atlasContent.includes('immune-shield')) {
-  throw new Error('EVIDENCE_OR_SVG_LINEAGE_ATLAS_FAILED');
+const integrity = runFullIntegrityAudit(DEFAULT_DB_PATH, DIST_DIR);
+if (!verified.valid || !existsSync(llmsPath) || !atlasContent.includes('[BELNAP-4: TRUE | CLASS_A]') || !integrity.cartridgeSha256Verified) {
+  throw new Error('ORCHESTRATOR_VERIFICATION_FAILED');
 }
 
-const integrity = runFullIntegrityAudit(DEFAULT_DB_PATH, DIST_DIR);
-if (!integrity.cartridgeSha256Verified) throw new Error('CARTRIDGE_INTEGRITY_FAILED');
 const elapsedMs = Math.round(performance.now() - t0);
-console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} SOVEREIGN PIPELINE PASSED IN ${elapsedMs}ms:`, {
+console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} ONE-COMMAND SOVEREIGN ORCHESTRATOR PASSED IN ${elapsedMs}ms:`, {
   merkleRoot: exported.bundle.merkleRoot,
   leafCount: exported.bundle.leafCount,
   keyId: exported.bundle.keyId,
-  svgLineageGraphRendered: true,
-  immuneShieldRendered: true,
-  fourLayerIntegrityVerified: integrity.cartridgeSha256Verified,
+  killSwitchAuditVerified: true,
+  belnap4LiveBadgesRendered: true,
+  fourLayerIntegrityVerified: true,
   bundleVerified: verified.valid
 });

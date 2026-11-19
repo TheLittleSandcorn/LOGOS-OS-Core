@@ -3,13 +3,15 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { EvidenceBundle } from '../bricks/graph-memory/export-audit-dossier.ts';
 import type { QuarantineRecord } from '../bricks/graph-memory/failure-alchemist.ts';
-import { DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
+import { evaluateEntityBelnapState } from '../kernel/belnap-engine.ts';
+import { DEFAULT_DB_PATH, DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
 
 export function exportEternalCartridgeAndAtlas(
   bundle: EvidenceBundle,
   outDir: string = DIST_DIR,
   retractedEntities: string[] = [],
-  quarantineEntries: QuarantineRecord[] = []
+  quarantineEntries: QuarantineRecord[] = [],
+  dbPath: string = DEFAULT_DB_PATH
 ): { cartridgePath: string; atlasPath: string; cartridgeSha256: string } {
   mkdirSync(outDir, { recursive: true });
   const canonicalPayload = JSON.stringify({
@@ -52,6 +54,15 @@ export function exportEternalCartridgeAndAtlas(
       ? quarantineEntries.map((q) => `<li><code>${q.candidate_id}</code> &rarr; <strong>${q.error_code}</strong> (<code>${q.fingerprint.slice(0, 12)}</code>)</li>`).join('')
       : '<li>No quarantined entries in local store.</li>';
 
+  const axiomEntities = ['axiom:zero_dependency', 'axiom:loopback_only', 'axiom:belnap_4', 'axiom:anti_a_quarantine'];
+  const axiomBadgesHtml = axiomEntities
+    .map((ent) => {
+      const evalRes = evaluateEntityBelnapState(ent, dbPath);
+      const badgeColor = evalRes.state === 'TRUE' ? '#065f46' : evalRes.state === 'BOTH' ? '#991b1b' : '#334155';
+      return `<li><code>${ent}</code> <span class="belnap-badge" style="background:${badgeColor};color:#f8fafc;padding:2px 8px;border-radius:4px;font-size:12px">[BELNAP-4: ${evalRes.state} | CLASS_A]</span></li>`;
+    })
+    .join('\n    ');
+
   const atlasHtml = `<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><title>LOGOS-OS-Core v${LOGOS_VERSION} — Sovereign Master Atlas</title></head>
@@ -59,6 +70,12 @@ export function exportEternalCartridgeAndAtlas(
   <h1>LOGOS-OS-Core v${LOGOS_VERSION} — Sovereign Master Atlas</h1>
   <p><strong>Merkle-Root (SHA-256):</strong> <code>${bundle.merkleRoot}</code> | <strong>Leaves:</strong> ${bundle.leafCount} | <strong>Quarantined:</strong> ${quarantineEntries.length}</p>
   ${retractionBanner}
+  <section style="margin:16px 0;padding:12px;border:1px solid #334155;border-radius:8px">
+    <h2 style="margin-top:0">Verified CLASS_A Axioms &amp; Live Belnap-4 Badges</h2>
+    <ul>
+    ${axiomBadgesHtml}
+    </ul>
+  </section>
   <section id="immune-shield" style="margin:16px 0;padding:12px;border:1px solid #991b1b;background:#1f1115;border-radius:8px">
     <h2 style="margin-top:0;color:#fca5a5">Epistemic Immune Shield (Anti-A Quarantine Telemetry)</h2>
     <ul>${quarantineItems}</ul>

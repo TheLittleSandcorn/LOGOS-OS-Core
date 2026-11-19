@@ -62,7 +62,7 @@ export function runFullIntegrityAudit(dbPath: string = DEFAULT_DB_PATH, outDir: 
   };
 }
 
-if (process.argv === fileURLToPath(import.meta.url)) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const report = runFullIntegrityAudit();
   console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} 4-LAYER INTEGRITY AUDIT PASSED:`, report);
 }

@@ -57,7 +57,7 @@ export function runImmuneSystemAudit(): { quarantinedCount: number; zeroAmnesiaV
   }
 }
 
-if (process.argv === fileURLToPath(import.meta.url)) {
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const report = runImmuneSystemAudit();
   console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} EPISTEMIC IMMUNE SYSTEM AUDIT PASSED:`, report);
 }
