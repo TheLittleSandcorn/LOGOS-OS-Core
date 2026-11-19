@@ -1,3 +1,4 @@
+import { runSecurityPerimeterAudit } from './test-security-perimeter.ts';
 import { runEd25519LedgerSignAudit } from './sign-sovereign-ledger.ts';
 import { runChaosSeedFuzzer } from './fuzz-sovereign-seed.ts';
 import assert from 'node:assert/strict';
@@ -44,7 +45,9 @@ assert.equal(reg.hasPolicy(POLICY_WRITE_CLASS_A), false);
 reg.switchMode(MODE_STRICT_PROOF);
 assert.equal(reg.hasPolicy(POLICY_WRITE_CLASS_A), true);
 
-// 2. Seeded EAVT Ledger, Immune System & Retraction Cascade
+// 2. Egress Firewall Perimeter & Seeded EAVT Ledger
+const perimeter = runSecurityPerimeterAudit();
+assert.equal(perimeter.subdomainSpoofBlocked, true);
 ensureSeededDatabase(DEFAULT_DB_PATH);
 const immuneReport = runImmuneSystemAudit();
 assert.equal(immuneReport.zeroAmnesiaVerified, true);

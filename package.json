@@ -1,6 +1,6 @@
 {
   "name": "logos-os-core",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "private": false,
   "type": "module",
   "description": "Zero-dependency TypeScript & Node.js cryptographic verification core with SQLite EAVT ledger, SHA-256 Merkle proofs, Ed25519 trust anchor, Belnap-4 logic, and a 127.0.0.1 Sovereign Cockpit.",
@@ -17,6 +17,7 @@
     "immune": "node scripts/test-immune-system.ts",
     "integrity": "node scripts/verify-ledger-integrity.ts",
     "fuzz": "node scripts/fuzz-sovereign-seed.ts",
-    "sign": "node scripts/sign-sovereign-ledger.ts"
+    "sign": "node scripts/sign-sovereign-ledger.ts",
+    "perimeter": "node scripts/test-security-perimeter.ts"
   }
 }

@@ -1,0 +1,30 @@
+name: LOGOS-OS-Core Zero-Dependency Sovereign Audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  sovereign-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24 (Zero npm install)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Run 7-Stage Sovereign Pipeline
+        run: node --run sovereign
+
+      - name: Run Security Perimeter & Bundle Audits
+        run: |
+          node --run perimeter
+          node --run immune
+          node --run fuzz
+          node --run sign
+          node --run verify-bundle
