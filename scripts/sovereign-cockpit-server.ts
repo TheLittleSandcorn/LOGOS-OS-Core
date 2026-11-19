@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { admitFormalTheorem } from '../bricks/cosci-bridge/formal-theorem-gate.ts';
 import { verifyEvidenceBundle } from '../bricks/graph-memory/bundle-verifier.ts';
 import { computeEavtMerkleSnapshot } from '../bricks/graph-memory/merkle-ledger.ts';
+import { computeEavtMerkleSnapshot } from '../bricks/graph-memory/merkle-ledger.ts';
 import { EGraphEquivalenceEngine } from '../bricks/graph-memory/egraph-engine.ts';
 import { exportAuditDossierAndBundle } from '../bricks/graph-memory/export-audit-dossier.ts';
 import { listQuarantineEntries, recordAntiAFailure } from '../bricks/graph-memory/failure-alchemist.ts';
@@ -37,6 +38,7 @@ async function openDossierModal() { const ds = await fetch('/api/dossier').then(
   "document.getElementById('btn-retract')?.addEventListener('click', triggerRetract);",
   "document.getElementById('btn-recover')?.addEventListener('click', triggerRecover);",
   "document.getElementById('btn-merkle')?.addEventListener('click', openMerkleModal);
+  document.getElementById('btn-merkle')?.addEventListener('click', openMerkleModal);
   document.getElementById('btn-dossier')?.addEventListener('click', openDossierModal);",
   "document.getElementById('btn-close-dos')?.addEventListener('click', () => document.getElementById('dosDlg')?.close());",
   "document.getElementById('btn-egraph')?.addEventListener('click', checkEgraph);",
@@ -172,6 +174,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       } finally { db.close(); }
       return;
     }
+    if (url.pathname === '/api/merkle') { const snap = computeEavtMerkleSnapshot(dbPath); const db = new DatabaseSync(dbPath, { readOnly: true }); let recentLeaves = []; try { recentLeaves = db.prepare('SELECT seq, entity, attribute, value, truth_state FROM eavt_ledger ORDER BY seq DESC LIMIT 8').all(); } finally { db.close(); } sendJson(res, 200, { algorithm: 'SHA-256-BINARY-MERKLE', leafCount: snap.leafCount, merkleRoot: snap.merkleRoot, recentLeaves }); return; }
     if (url.pathname === '/api/merkle') { const snap = computeEavtMerkleSnapshot(dbPath); const db = new DatabaseSync(dbPath, { readOnly: true }); let recentLeaves = []; try { recentLeaves = db.prepare('SELECT seq, entity, attribute, value, truth_state FROM eavt_ledger ORDER BY seq DESC LIMIT 8').all(); } finally { db.close(); } sendJson(res, 200, { algorithm: 'SHA-256-BINARY-MERKLE', leafCount: snap.leafCount, merkleRoot: snap.merkleRoot, recentLeaves }); return; }
     if (url.pathname === '/api/dossier') {
       const dossierPath = join(outDir, 'AUDIT-DOSSIER.md');
