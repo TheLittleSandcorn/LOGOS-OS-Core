@@ -3,10 +3,11 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
+import { admitFormalTheorem } from '../bricks/cosci-bridge/formal-theorem-gate.ts';
 import { verifyEvidenceBundle } from '../bricks/graph-memory/bundle-verifier.ts';
 import { EGraphEquivalenceEngine } from '../bricks/graph-memory/egraph-engine.ts';
 import { exportAuditDossierAndBundle } from '../bricks/graph-memory/export-audit-dossier.ts';
-import { listQuarantineEntries } from '../bricks/graph-memory/failure-alchemist.ts';
+import { listQuarantineEntries, recordAntiAFailure } from '../bricks/graph-memory/failure-alchemist.ts';
 import { verifyPayloadEd25519 } from '../bricks/graph-memory/trust-anchor.ts';
 import { evaluateEntityBelnapState } from '../kernel/belnap-engine.ts';
 import { DEFAULT_DB_PATH, DIST_DIR, LOGOS_VERSION } from '../kernel/paths.ts';
@@ -19,12 +20,14 @@ const CSP_HEADER = "default-src 'self'; script-src 'self'; style-src 'self' 'uns
 const COCKPIT_UI_JS = [
   "function renderOut(t, p) { const o = document.getElementById('cockpit-output'); if (o) o.textContent = JSON.stringify({ section: t, payload: p }, null, 2); }",
   "async function refreshStatus() { renderOut('SYSTEM_STATUS', await fetch('/api/status').then(r => r.json())); }",
+  "async function ingestTheorem() { const body = { id: document.getElementById('thm-id')?.value || '', claim: document.getElementById('thm-claim')?.value || '', leanHeader: document.getElementById('thm-lean')?.value || '', critiqueK: document.getElementById('thm-k')?.value || '' }; const r = await fetch('/api/ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); renderOut('INGEST_' + r.status, await r.json()); }",
   "async function checkBelnap() { const e = document.getElementById('belnap-entity')?.value || 'axiom:belnap_4'; renderOut('BELNAP_4', await fetch('/api/belnap?entity=' + encodeURIComponent(e)).then(r => r.json())); }",
   "async function triggerRetract() { const e = document.getElementById('belnap-entity')?.value || 'axiom:belnap_4'; renderOut('RETRACT', await fetch('/api/retract?entity=' + encodeURIComponent(e), { method: 'POST' }).then(r => r.json())); }",
   "async function triggerRecover() { const e = document.getElementById('belnap-entity')?.value || 'axiom:belnap_4'; renderOut('RECOVER', await fetch('/api/recover?entity=' + encodeURIComponent(e), { method: 'POST' }).then(r => r.json())); }",
   "async function checkDossier() { renderOut('ED25519_DOSSIER', await fetch('/api/dossier').then(r => r.json())); }",
   "async function checkEgraph() { const l = document.getElementById('egraph-lhs')?.value || '1 * (x + 0)'; const r = document.getElementById('egraph-rhs')?.value || 'x'; renderOut('EGRAPH', await fetch('/api/egraph?lhs=' + encodeURIComponent(l) + '&rhs=' + encodeURIComponent(r)).then(r => r.json())); }",
   "async function runLiveAudit() { renderOut('FULL_AUDIT', await fetch('/api/run-pipeline', { method: 'POST' }).then(r => r.json())); }",
+  "document.getElementById('btn-ingest')?.addEventListener('click', ingestTheorem);",
   "document.getElementById('btn-refresh')?.addEventListener('click', refreshStatus);",
   "document.getElementById('btn-belnap')?.addEventListener('click', checkBelnap);",
   "document.getElementById('btn-retract')?.addEventListener('click', triggerRetract);",
@@ -36,17 +39,23 @@ const COCKPIT_UI_JS = [
 ].join('\n');
 
 function sendJson(res: ServerResponse, statusCode: number, data: unknown): void {
-  res.writeHead(statusCode, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Content-Security-Policy': CSP_HEADER,
-    'X-Frame-Options': 'DENY',
-    'X-Content-Type-Options': 'nosniff'
-  });
+  res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff' });
   res.end(JSON.stringify(data));
 }
 
+function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => {
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as Record<string, unknown>); }
+      catch { resolve({}); }
+    });
+  });
+}
+
 export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, outDir: string = DIST_DIR): Server {
-  return createServer((req: IncomingMessage, res: ServerResponse) => {
+  return createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', `http://${LOOPBACK_HOST}`);
     if (req.method === 'POST') {
       const origin = req.headers.origin;
@@ -60,15 +69,35 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       res.end(COCKPIT_UI_JS);
       return;
     }
+    if (url.pathname === '/api/ingest' && req.method === 'POST') {
+      ensureSeededDatabase(dbPath);
+      const body = await readJsonBody(req);
+      const id = String(body.id ?? '').trim();
+      const claim = String(body.claim ?? '').trim();
+      const leanHeader = String(body.leanHeader ?? '').trim();
+      const critiqueK = String(body.critiqueK ?? '').trim();
+      const gate = admitFormalTheorem({ id, statement: `${leanHeader} ${claim}`, containsSorryAx: `${leanHeader} ${claim}`.includes('sorryAx'), hasFormalProof: leanHeader.length >= 5 && claim.length >= 3, hasMethodologicalContext: critiqueK.length >= 5 });
+      if (!gate.admitted || !id) {
+        const q = recordAntiAFailure(id || 'anon:theorem', gate.reason, `${leanHeader} ${claim}`, dbPath);
+        sendJson(res, 400, { admitted: false, quarantinedInAntiA: true, reason: gate.reason, fingerprint: q.fingerprint });
+        return;
+      }
+      const db = new DatabaseSync(dbPath);
+      try {
+        db.prepare('INSERT INTO eavt_ledger (entity, attribute, value, truth_state, confidence, epistemic_class, retracted_by_seq) VALUES (?, ?, ?, ?, ?, ?, NULL)').run(id, 'formal_theorem_fk', `${claim} [K: ${critiqueK}]`, 'TRUE', 1.0, 'CLASS_A');
+      } finally { db.close(); }
+      const exported = exportAuditDossierAndBundle(dbPath, outDir);
+      exportEternalCartridgeAndAtlas(exported.bundle, outDir, [], exported.quarantine, dbPath);
+      sendJson(res, 200, { admitted: true, id, atlasReloaded: true, merkleRoot: exported.bundle.merkleRoot });
+      return;
+    }
     if (url.pathname === '/api/status') {
       ensureSeededDatabase(dbPath);
       const db = new DatabaseSync(dbPath, { readOnly: true });
       try {
         const row = db.prepare("SELECT COUNT(*) AS cnt FROM eavt_ledger WHERE epistemic_class = 'CLASS_A'").get() as { cnt: number };
         sendJson(res, 200, { ok: true, version: LOGOS_VERSION, bindHost: LOOPBACK_HOST, classACount: row.cnt, quarantineCount: listQuarantineEntries(dbPath).length });
-      } finally {
-        db.close();
-      }
+      } finally { db.close(); }
       return;
     }
     if (url.pathname === '/api/dossier') {
@@ -84,9 +113,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       ensureSeededDatabase(dbPath);
       const entity = url.searchParams.get('entity') ?? 'axiom:belnap_4';
       const db = new DatabaseSync(dbPath);
-      try {
-        db.prepare('INSERT INTO eavt_ledger (entity, attribute, value, truth_state, confidence, epistemic_class, retracted_by_seq) VALUES (?, ?, ?, ?, ?, ?, NULL)').run(entity, 'retraction_event', 'CONFLICT_RETRACTED', 'FALSE', 1.0, 'CLASS_A');
-      } finally { db.close(); }
+      try { db.prepare('INSERT INTO eavt_ledger (entity, attribute, value, truth_state, confidence, epistemic_class, retracted_by_seq) VALUES (?, ?, ?, ?, ?, ?, NULL)').run(entity, 'retraction_event', 'CONFLICT_RETRACTED', 'FALSE', 1.0, 'CLASS_A'); } finally { db.close(); }
       const exported = exportAuditDossierAndBundle(dbPath, outDir);
       exportEternalCartridgeAndAtlas(exported.bundle, outDir, [entity], exported.quarantine, dbPath);
       sendJson(res, 200, { action: 'RETRACTED', atlasReloaded: true, evaluation: evaluateEntityBelnapState(entity, dbPath) });
@@ -125,7 +152,7 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
       return;
     }
     if (url.pathname === '/') {
-      const html = '<!doctype html><html><head><meta charset="utf-8"><title>LOGOS-OS-Core Cockpit</title></head><body style="background:#090d16;color:#e2e8f0;font-family:sans-serif;padding:2rem"><h1>LOGOS-OS-Core v' + LOGOS_VERSION + ' Cockpit</h1><button id="btn-belnap">Belnap-4</button><button id="btn-retract">Retract</button><button id="btn-recover">Recover</button><button id="btn-dossier">Verify Ed25519 Dossier</button><input id="egraph-lhs" value="1 * (x + 0)" /><input id="egraph-rhs" value="x" /><button id="btn-egraph">E-Graph</button><button id="btn-refresh">Status</button><button id="btn-audit">Run Audit</button><pre id="cockpit-output">Loading...</pre><script src="/cockpit-ui.js"></script></body></html>';
+      const html = '<!doctype html><html><head><meta charset="utf-8"><title>LOGOS-OS-Core Cockpit</title></head><body style="background:#090d16;color:#e2e8f0;font-family:sans-serif;padding:2rem"><h1>LOGOS-OS-Core v' + LOGOS_VERSION + ' Class-A Composer Cockpit</h1><div><input id="thm-id" placeholder="Theorem ID" /><input id="thm-claim" placeholder="Claim" /><input id="thm-lean" placeholder="Lean Header" /><input id="thm-k" placeholder="Critique K" /><button id="btn-ingest">Ingest Class-A</button></div><div><button id="btn-belnap">Belnap-4</button><button id="btn-retract">Retract</button><button id="btn-recover">Recover</button><button id="btn-dossier">Verify Ed25519 Dossier</button></div><div><input id="egraph-lhs" value="1 * (x + 0)" /><input id="egraph-rhs" value="x" /><button id="btn-egraph">E-Graph</button><button id="btn-refresh">Status</button><button id="btn-audit">Run Audit</button></div><pre id="cockpit-output">Loading...</pre><script src="/cockpit-ui.js"></script></body></html>';
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP_HEADER, 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff' });
       res.end(html);
       return;
@@ -137,5 +164,5 @@ export function createSovereignCockpitServer(dbPath: string = DEFAULT_DB_PATH, o
 if (process.argv.at(1) === fileURLToPath(import.meta.url)) {
   const port = Number.parseInt(process.env.LOGOS_PORT ?? '4173', 10);
   const server = createSovereignCockpitServer(DEFAULT_DB_PATH, DIST_DIR);
-  server.listen(port, LOOPBACK_HOST, () => console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} COCKPIT ON http://${LOOPBACK_HOST}:${port}`));
+  server.listen(port, LOOPBACK_HOST, () => console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} COMPOSER COCKPIT ON http://${LOOPBACK_HOST}:${port}`));
 }
