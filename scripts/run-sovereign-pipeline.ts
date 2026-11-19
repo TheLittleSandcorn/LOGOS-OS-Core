@@ -41,7 +41,7 @@ assert.equal(immuneReport.classALedgerUntouched, true);
 const hits = searchKnowledgeLedger('belnap', DEFAULT_DB_PATH);
 assert.ok(hits.length >= 1);
 
-const memCascadePath = 'file:logos_v22_cascade?mode=memory&cache=shared';
+const memCascadePath = 'file:logos_v23_cascade?mode=memory&cache=shared';
 const holdDb = new DatabaseSync(memCascadePath);
 try {
   ensureSeededDatabase(memCascadePath);
@@ -72,10 +72,10 @@ assert.equal(evaluateCoSciAdmission({ id: 'cosci:1', sourceRepo: 'TheLittleSandc
 const exported = exportAuditDossierAndBundle(DEFAULT_DB_PATH, DIST_DIR);
 const verified = verifyEvidenceBundle(exported.bundle);
 const llmsPath = exportLlmsTxtManifest(exported.bundle, DIST_DIR);
-const eternal = exportEternalCartridgeAndAtlas(exported.bundle, DIST_DIR);
+const eternal = exportEternalCartridgeAndAtlas(exported.bundle, DIST_DIR, [], exported.quarantine);
 const atlasContent = readFileSync(eternal.atlasPath, 'utf8');
-if (!verified.valid || !existsSync(llmsPath) || !atlasContent.includes('formula-canvas') || !atlasContent.includes('retraction-radar')) {
-  throw new Error('EVIDENCE_OR_CANVAS_ATLAS_FAILED');
+if (!verified.valid || !existsSync(llmsPath) || !atlasContent.includes('lineage-svg') || !atlasContent.includes('immune-shield')) {
+  throw new Error('EVIDENCE_OR_SVG_LINEAGE_ATLAS_FAILED');
 }
 
 const elapsedMs = Math.round(performance.now() - t0);
@@ -83,7 +83,7 @@ console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} SOVEREIGN PIPELINE PASSED IN ${elap
   merkleRoot: exported.bundle.merkleRoot,
   leafCount: exported.bundle.leafCount,
   keyId: exported.bundle.keyId,
-  antiAQuarantinedCount: immuneReport.quarantinedCount,
-  zeroAmnesiaVerified: immuneReport.zeroAmnesiaVerified,
+  svgLineageGraphRendered: true,
+  immuneShieldRendered: true,
   bundleVerified: verified.valid
 });

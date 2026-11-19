@@ -1,6 +1,6 @@
 {
   "name": "logos-os-core",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": false,
   "type": "module",
   "description": "Zero-dependency TypeScript & Node.js cryptographic verification core with SQLite EAVT ledger, SHA-256 Merkle proofs, Ed25519 trust anchor, Belnap-4 logic, and a 127.0.0.1 Sovereign Cockpit.",
