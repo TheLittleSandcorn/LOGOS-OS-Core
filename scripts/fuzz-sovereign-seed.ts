@@ -14,8 +14,8 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-export function runChaosSeedFuzzer(seed = 0x5eed2026, iterations = 50): {
-  seedHex: string;
+export function runChaosSeedFuzzer(seed = 20261117, iterations = 50): {
+  seed: number;
   totalMutations: number;
   blockedAttacks: number;
   admittedValid: number;
@@ -44,7 +44,7 @@ export function runChaosSeedFuzzer(seed = 0x5eed2026, iterations = 50): {
   }
 
   return {
-    seedHex: `0x${seed.toString(16).toUpperCase()}`,
+    seed,
     totalMutations: iterations,
     blockedAttacks,
     admittedValid
@@ -52,6 +52,8 @@ export function runChaosSeedFuzzer(seed = 0x5eed2026, iterations = 50): {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const report = runChaosSeedFuzzer();
+  const cliArg = process.argv.at(2);
+  const parsedSeed = cliArg && /^\d+$/.test(cliArg) ? Number.parseInt(cliArg, 10) : 20261117;
+  const report = runChaosSeedFuzzer(parsedSeed, 50);
   console.log(`LOGOS-OS-CORE v${LOGOS_VERSION} MULBERRY32 CHAOS-SEED FUZZER PASSED:`, report);
 }

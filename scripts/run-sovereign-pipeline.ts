@@ -1,3 +1,4 @@
+import { runEd25519LedgerSignAudit } from './sign-sovereign-ledger.ts';
 import { runChaosSeedFuzzer } from './fuzz-sovereign-seed.ts';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -84,7 +85,8 @@ const verified = verifyEvidenceBundle(exported.bundle);
 const llmsPath = exportLlmsTxtManifest(exported.bundle, DIST_DIR);
 const eternal = exportEternalCartridgeAndAtlas(exported.bundle, DIST_DIR, [], exported.quarantine, DEFAULT_DB_PATH);
 const atlasContent = readFileSync(eternal.atlasPath, 'utf8');
-const fuzz = runChaosSeedFuzzer(0x5eed2026, 50);
+const fuzz = runChaosSeedFuzzer(20261117, 50);
+const signAudit = runEd25519LedgerSignAudit(DEFAULT_DB_PATH, DIST_DIR);
 const integrity = runFullIntegrityAudit(DEFAULT_DB_PATH, DIST_DIR);
 if (!verified.valid || !existsSync(llmsPath) || !atlasContent.includes('class="axiom-card"') || !integrity.cartridgeSha256Verified) {
   throw new Error('ORCHESTRATOR_VERIFICATION_FAILED');
